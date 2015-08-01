@@ -1,0 +1,11 @@
+{
+  "name": "schwarm-lernen-api",
+  "version": "0.0.1",
+  "description": "Eine RESTlike API für das Projekt Schwarmlernen an der Hochschule Coburg",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Maximilian Stock",
+  "license": "MIT"
+}
