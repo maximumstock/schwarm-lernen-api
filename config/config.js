@@ -1,6 +1,6 @@
 /**
  * @file Modul zum Laden der Serverkonfiguration
- * @author Maximilian Stock
+\b
  * Dieses Modul lädt die jeweilige Konfiguration basierend auf der Umgebungsvariable `NODE_ENV`.
  * Durch das Setzen der Umgebungsvariable `NODE_ENV` kann die Auswahl beeinflusst werden.
  */
@@ -24,4 +24,4 @@ module.exports = function() {
 
   return config;
 
-}(process.env);
+}(process.NODE_ENV);

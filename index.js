@@ -1,6 +1,5 @@
 /**
  * @file Einstiegspunkt für die V8-Runtime. Startet den Webserver.
- * @author Maximilian Stock
  */
 
 // Laden der Middleware
@@ -9,8 +8,10 @@ var path = require('path');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
 var bodyParser = require('body-parser');
+var compression = require('compression');
+var validator = require('express-validator');
 
-// Erstellen des Servers
+// Erstellen des Serverinstanz
 var app = express();
 
 // Einbinden der Middleware in die Requestverarbeitung
@@ -21,13 +22,15 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
   extended: false
 }));
+app.use(validator());
+app.use(compression()); // Gzip Kompression
 
 // Konfigurationsdatei laden
 var config = require('./config/config');
 
 // Routen einbinden
-var routes = require('./routes/index');
-app.use('/', routes);
+var apiv1 = require('./routes/v1/index');
+app.use('/api/v1', apiv1);
 
 // 404 Fehler abfangen
 app.use(function(req, res, next) {
@@ -43,7 +46,7 @@ app.use(function(req, res, next) {
 if (app.get('env') === 'development') {
   app.use(function(err, req, res, next) {
     res.status(err.status || 500);
-    res.render('error', {
+    res.json({
       message: err.message,
       error: err
     });
@@ -54,7 +57,7 @@ if (app.get('env') === 'development') {
 // no stacktraces leaked to user
 app.use(function(err, req, res, next) {
   res.status(err.status || 500);
-  res.render('error', {
+  res.json({
     message: err.message,
     error: {}
   });
@@ -68,9 +71,6 @@ var server = app.listen(config.port || 4003, function(error) {
   }
   // Keine Fehler
   console.log('Webserver läuft auf Port %d', server.address().port);
-})
-
-
-
+});
 
 module.exports = app;

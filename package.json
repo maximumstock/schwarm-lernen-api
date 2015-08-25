@@ -21,20 +21,22 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "mocha test/*"
+    "test": "mocha test/config test/models test/integration"
   },
   "keywords": [],
   "dependencies": {
+    "async": "^1.4.1",
     "body-parser": "^1.13.3",
+    "compression": "^1.5.2",
     "express": "^4.13.2",
-    "express-validator": "^2.13.0",
+    "express-validator": "^2.14.2",
     "morgan": "^1.6.1",
     "neo4j": "^2.0.0-RC2",
-    "serve-favicon": "^2.3.0"
+    "serve-favicon": "^2.3.0",
+    "util": "^0.10.3"
   },
   "devDependencies": {
     "chai": "^3.2.0",
-    "mocha": "^2.2.5",
-    "nodemon": "^1.4.0"
+    "mocha": "^2.2.5"
   }
 }
