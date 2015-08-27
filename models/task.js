@@ -1,28 +1,32 @@
+'use strict';
+
 /**
  * @file Enthält das Datenmodell und die Businessregeln für Aufgaben.
  */
+
+/**
+* @function Konstruktor für eine Aufgabe
+* @constructs
+* @param {object} _node Das Ergebnisobjekt der Datenbankabfrage, welches die Nutzdaten der Node enthält.
+*/
+var Task = module.exports = function Task(_node) {
+  Node.apply(this, arguments);
+};
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
 var validate = require('../lib/validation/validation');
 var errors = require('../lib/errors/errors');
+var moment = require('moment');
+
+var Node = require('./node');
 var Solution = require('./solution');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
 });
 
-/**
- * @function Konstruktor für eine Aufgabe
- * @constructs
- * @param {object} _node Das Ergebnisobjekt der Datenbankabfrage, welches die Nutzdaten der Node enthält.
- */
-var Task = module.exports = function Task(_node) {
-  // Speichern der Node als Instanzvariable
-  // Dadurch werden alle Labels und Properties aus der Datenbank in diesem Objekt gespeichert
-  this._node = _node;
-  delete this._node._id;
-};
+Task.prototype = Object.create(Node.prototype);
 
 // Öffentliche Konstanten
 
@@ -43,17 +47,7 @@ Task.VALIDATION_INFO = {
  */
 Object.defineProperty(Task.prototype, 'description', {
   get: function() {
-    return this._node.properties['description'];
-  }
-});
-
-/**
- * @function Propertydefinition für die UUID der Aufgabe
- * @prop {string} uuid UUID der Aufgabe
- */
-Object.defineProperty(Task.prototype, 'uuid', {
-  get: function() {
-    return this._node.properties['uuid'];
+    return this._node.properties.description;
   }
 });
 
@@ -89,11 +83,11 @@ Task.get = function(uuid, callback) {
       return callback(err);
     }
     // erstelle neue Aufgabe-Instanz und gib diese zurück
-    var a = new Task(result[0]['a']);
+    var a = new Task(result[0].a);
     callback(null, a);
   });
 
-}
+};
 
 /**
  * @function get Statische Gettermethode für ALLE Aufgaben
@@ -114,14 +108,14 @@ Task.getAll = function(callback) {
     // Erstelle ein Array von Aufgaben aus dem Ergebnisdokument
     var aufgaben = [];
     result.forEach(function(e) {
-      var m = new Task(e['a']);
+      var m = new Task(e.a);
       aufgaben.push(m);
     });
 
     callback(null, aufgaben);
   });
 
-}
+};
 
 /**
  * @function
@@ -140,12 +134,12 @@ Task.create = function(properties, parentUUID, callback) {
     return callback(e);
   }
 
-  // validate
+  properties.createdAt = parseInt(moment().format('X'));
 
   var query = [
     'MATCH (dt:Target {uuid: {parent}})',
     'CREATE (a:Task {properties})',
-    'CREATE UNIQUE (a)<-[r:HAS_TASK]-(dt)',
+    'CREATE UNIQUE (a)-[r:BELONGS_TO]->(dt)',
     'return a'
   ].join('\n');
 
@@ -165,7 +159,7 @@ Task.create = function(properties, parentUUID, callback) {
     if(result.length === 0) {
       err = new Error('Es gibt kein gültiges Lernziel als Parent mit der UUID `' + parentUUID + '`');
       err.status = 404;
-      err.name = 'ParentNotFound'
+      err.name = 'ParentNotFound';
 
       return callback(err);
     }
@@ -174,12 +168,12 @@ Task.create = function(properties, parentUUID, callback) {
     db.cypher({
       query: 'MATCH (a:Task) where ID(a) = {id} RETURN a',
       params: {
-        id: result[0]['a']._id
+        id: result[0].a._id
       }
     }, function(err, result) {
       if(err) return callback(err);
       // erstelle neue Aufgabeninstanz und gib diese zurück
-      var a = new Task(result[0]['a']);
+      var a = new Task(result[0].a);
       callback(null, a);
     });
 
@@ -199,7 +193,7 @@ Task.prototype.del = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (a:Task {uuid: {uuid}})<-[r:HAS_TASK]-(o)', // Aufgabe hängt immer an einem Target
+    'MATCH (a:Task {uuid: {uuid}})-[r:BELONGS_TO]->(o)', // Aufgabe hängt immer an einem Target
     'DELETE t, r'
   ].join('\n');
 
@@ -225,7 +219,7 @@ Task.prototype.del = function(callback) {
     if(err) return callback(err);
     // gib `null` zurück (?!)
     callback(null, null); // success
-  })
+  });
 
 };
 
@@ -242,20 +236,20 @@ Task.prototype.patch = function(properties, callback) {
   var self = this;
 
   try {
-    var safeProps = validate.validate(Task.VALIDATION_INFO, properties, false); // `false` da SET +=<--
+    properties = validate.validate(Task.VALIDATION_INFO, properties, false); // `false` da SET +=<--
   } catch(e) {
     return callback(e);
   }
 
-  query = [
+  var query = [
     'MATCH (a:Task {uuid: {uuid}})',
     'SET a += {properties}',
     'RETURN a'
-  ].join('\n')
+  ].join('\n');
 
   var params = {
     uuid: self.uuid,
-    properties: safeProps
+    properties: properties
   };
 
   db.cypher({
@@ -274,7 +268,7 @@ Task.prototype.patch = function(properties, callback) {
     }
 
     // aktualisierte Aufgabeninstanz erzeugen und zurückgeben
-    var a = new Task(result[0]['a']);
+    var a = new Task(result[0].a);
     callback(null, a);
 
   });
@@ -293,9 +287,9 @@ Task.prototype.changeParent = function(newParent, callback) {
 
   var query = [
     'MATCH (a:Task {uuid: {uuid}}), (p:Target {uuid: {parent}})',
-    'OPTIONAL MATCH (a)<-[r:HAS_TARGET]-(oldp:Target)',
+    'OPTIONAL MATCH (a)-[r:BELONGS_TO]->(oldp:Target)',
     'DELETE r',
-    'CREATE UNIQUE (a)<-[newr:HAS_TARGET]-(p)',
+    'CREATE UNIQUE (a)-[newr:BELONGS_TO]->(p)',
     'RETURN a'
   ].join('\n');
 
@@ -340,7 +334,7 @@ Task.prototype.solutions = function(callback) {
     if(err) return callback(err);
     var solutions = [];
     result.forEach(function(i) {
-      solutions.push(new Solution(i['s']));
+      solutions.push(new Solution(i.s));
     });
     callback(null, solutions);
 
@@ -360,4 +354,4 @@ Task.prototype.addMetadata = function(apiVersion) {
   this._node.solutions = base + '/solutions';
   this._node.parent = base + '/parent';
 
-}
+};

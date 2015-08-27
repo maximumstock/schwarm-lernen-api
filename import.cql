@@ -15,23 +15,20 @@ match (d:Degree {name: "Informatik"}) with range(1,20) as RANGE, d foreach(r in 
 
 // Aufgaben
 match (u:User), (t:Target) where rand() < 0.05 create (u)-[:CREATED]->(ta:Task)-[:BELONGS_TO]->(t);
-// Bewertungen mit Rating zwischen 1-5 und Kommentare
-match (u:User), (t:Task) where rand() < 0.01 create unique (u)-[:RATES {rating: (rand()%5+1)}]->(t);
-match (u:User), (t:Task) where rand() < 0.01 create unique (u)-[:COMMENTS {text: "Dies ist ein Kommentar"}]->(t);
 
 // Infos
 match (u:User), (t:Target) where rand() < 0.01 create (u)-[:CREATED]->(i:Info)-[:BELONGS_TO]->(t);
-// Bewertungen mit Rating zwischen 1-5 und Kommentare
-match (u:User), (i:Info) where rand() < 0.01 create unique (u)-[:RATES {rating: (rand()%5+1)}]->(i);
-match (u:User), (i:Info) where rand() < 0.01 create unique (u)-[:COMMENTS {text: "Dies ist ein Kommentar"}]->(i);
 
 // Lösungen
 match (u:User), (t:Task) where rand() < 0.05 create (u)-[:CREATED]->(s:Solution)-[:SOLVES]->(t);
-// Bewertungen mit Rating zwischen 1-5 und Kommentare
-match (u:User), (s:Solution) where rand() < 0.1 create unique (u)-[:RATES {rating: (rand()%5+1)}]->(s);
-match (u:User), (s:Solution) where rand() < 0.1 create unique (u)-[:COMMENTS {text: "Dies ist ein Kommentar"}]->(s);
 
-// jeglicher erstellter Content darf nicht vom Ersteller bewertet werden -> Löschen aller Bewertungen aus Testdaten
+// Kommentare und Ratings
+match (u:User), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
+  create unique (u)-[:RATES {rating: round((rand()%5+1))}]->(s);
+match (u:User), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
+  create (u)-[:CREATED]->(c:Comment {text: "Dies ist ein Kommentar"})-[:BELONGS_TO]->(s);
+
+// jeglicher erstellter Content darf nicht vom Ersteller bewertet werden -> Löschen aller solcher Bewertungen aus Testdaten
 match (u:User)-[:CREATED]->()<-[r:RATES]-(u) delete r;
 
 // mehrfache Lösungen löschen (anscheinend nicht nötig)

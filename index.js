@@ -53,8 +53,7 @@ if (app.get('env') === 'development') {
   });
 }
 
-// Fehlerhandler für Produktivbetrieb
-// no stacktraces leaked to user
+// Fehlerhandler für Produktivbetrieb (kein Stacktrace)
 app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.json({

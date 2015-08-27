@@ -4,14 +4,14 @@
 
 var express = require('express');
 var router = express.Router();
-var Lernziel = require('../../models/lernziel');
+var Target = require('../../models/target');
 
 var apiVersion = '/api/v1';
 
 // Alle Lernziele zurückgeben
 router.get('/targets', function(req, res, next) {
 
-  Lernziel.getAll(function(err, result) {
+  Target.getAll(function(err, result) {
 
     if(err) return next(err);
     result = result.map(function(t) {
@@ -27,7 +27,7 @@ router.get('/targets', function(req, res, next) {
 // Gibt ein bestimmtes Lernziel, deren Targets/Aufgaben und die Parent-Node zurück
 router.get('/targets/:uuid', function(req, res, next) {
 
-  Lernziel.get(req.params.uuid, function(err, t) {
+  Target.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
     t.addMetadata(apiVersion);
     res.json(t._node);
@@ -38,7 +38,7 @@ router.get('/targets/:uuid', function(req, res, next) {
 // Gibt alle weiteren Kinder 1 Ebene unter aktuellem Lernziel zurück
 router.get('/targets/:uuid/children', function(req, res, next) {
 
-  Lernziel.get(req.params.uuid, function(err, t) {
+  Target.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
     t.children(1, function(err, children) {
       if(err) return next(err);
@@ -59,7 +59,7 @@ router.get('/targets/:uuid/children', function(req, res, next) {
 // Gibt die Parent-Node des jeweiligen Lernziels zurück
 router.get('/targets/:uuid/parent', function(req, res, next) {
 
-  Lernziel.get(req.params.uuid, function(err, t) {
+  Target.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
     t.parents(function(err, p) {
       if(err) return next(err);
@@ -82,7 +82,7 @@ router.post('/targets', function(req, res, next) {
   var parentUUID = req.body.parent;
   var properties = req.body;
 
-  Lernziel.create(properties, parentUUID, function(err, t) {
+  Target.create(properties, parentUUID, function(err, t) {
 
     if(err) return next(err);
     res.status(201).json(t);
@@ -94,7 +94,7 @@ router.post('/targets', function(req, res, next) {
 // Lernziel löschen
 router.delete('/targets/:uuid', function(req, res, next) {
 
-  Lernziel.get(req.params.uuid, function(err, t) {
+  Target.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
     t.del(function(err, result) {
       if(err) return next(err);
@@ -107,7 +107,7 @@ router.delete('/targets/:uuid', function(req, res, next) {
 // Lernziel aktualisieren
 router.put('/targets/:uuid', function(req, res, next) {
 
-  Lernziel.get(req.params.uuid, function(err, t) {
+  Target.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
 
     var newParentUUID = req.body.parent;
@@ -134,16 +134,3 @@ router.put('/targets/:uuid', function(req, res, next) {
 });
 
 module.exports = router;
-
-/* Helferfunktionen */
-
-/**
- * @function Fügt Metadaten an ein Objekt
- */
-function addMetadata(s) {
-
-  s._node.ref = apiVersion + '/targets/' + encodeURIComponent(s.uuid); // URL als Referenz
-  s._node.children = apiVersion + '/targets/' + encodeURIComponent(s.uuid) + '/children'; // Kind-Nodes (Tasks und Targets)
-  s._node.parent = apiVersion + '/targets/' + encodeURIComponent(s.uuid) + '/parent'; // Parent Referenz
-  return s;
-}
