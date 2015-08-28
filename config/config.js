@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * @file Modul zum Laden der Serverkonfiguration
 \b

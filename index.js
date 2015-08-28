@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * @file Einstiegspunkt für die V8-Runtime. Startet den Webserver.
  */
@@ -10,6 +12,7 @@ var logger = require('morgan');
 var bodyParser = require('body-parser');
 var compression = require('compression');
 var validator = require('express-validator');
+var pwgen = require('password-generator');
 
 // Erstellen des Serverinstanz
 var app = express();
@@ -42,7 +45,7 @@ app.use(function(req, res, next) {
 // Fehlerbehandlung
 
 // Fehlerhandler für Testumgebung
-// hierbei wird der Stacktrace des Fehlers mit ausgegeben
+// hierbei wird der Stacktrace des Fehlers ausgegeben
 if (app.get('env') === 'development') {
   app.use(function(err, req, res, next) {
     res.status(err.status || 500);
@@ -69,7 +72,7 @@ var server = app.listen(config.port || 4003, function(error) {
     throw error;
   }
   // Keine Fehler
-  console.log('Webserver läuft auf Port %d', server.address().port);
+  console.log('Server läuft auf Port %d', server.address().port);
 });
 
 module.exports = app;
