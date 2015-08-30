@@ -7,6 +7,6 @@ module.exports = {
 
   'environment': 'PRODUCTION',
   'NEO4J_URL': NEO4J_URL,
-  'HOST_URL': HOST_URL
+  'HOST_URL': HOST_URL || ''
 
 };

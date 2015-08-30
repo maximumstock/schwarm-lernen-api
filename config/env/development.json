@@ -1,6 +1,7 @@
 {
 
   "environment" : "DEVELOPMENT",
-  "NEO4J_URL"   : "http://neo4j:speedy66@localhost:7474/graphaware"
+  "NEO4J_URL"   : "http://neo4j:speedy66@localhost:7474/graphaware",
+  "HOST_URL"    : ""
 
 }
