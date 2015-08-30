@@ -43,7 +43,9 @@ Ein Studiengang ist der oberste Einstiegspunkt in unserer Hierarchie.
 
 #### Nodeinformationen
 `GET /degrees` - Liefert alle Module
+
 `GET /degrees/:uuid` - Liefert Studiengang mit ID `:uuid`
+
 `POST /degrees` - Erstellt einen neuen Studiengang
 
 - Erforderliche Parameter: `name` (String)
@@ -66,7 +68,9 @@ Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an 
 
 #### Node Properties
 `GET /targets` - Liefert Liste aller Lernziele
+
 `GET /targets/:uuid` - Liefert Lernziel `:uuid`
+
 `POST /targets` - Erstellt ein neues Lernziel
 
 - Erforderliche Parameter: `name` (String), `parent` (String (UUID des Parents))
@@ -81,13 +85,16 @@ Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an 
 
 #### Relationen
 `GET /targets/:uuid/children` - Liefert alle direkten Kindnodes (Lernziele bzw. Aufgaben) Lernziel `:uuid`
+
 `GET /targets/:uuid/parent` - Liefert Vaternode des Lernziel `:uuid`
 
 ### <a name="aufgabe">Aufgaben</a>
 
 #### Node Properties
 `GET /tasks` - Liefert Liste aller Aufgaben
+
 `GET /tasks/:uuid` - Liefert Aufgabe mit UUID `uuid`
+
 `POST /tasks` - Neue Aufgaben erstellen
 
 - Erforderliche Parameter: `description` (String) Inhalt, `parent` (String) UUID des Lernziels der Aufgabe
@@ -100,14 +107,18 @@ Aufgaben können weder verändert noch gelöscht werden.
 ### <a name="info">Infos</a>
 #### Node Properties
 `GET /infos` - Liefert Liste aller Infos
+
 `GET /infos/:uuid` - Liefert Info mit UUID `uuid`
+
 `POST /infos` - Neue Infos erstellen
 
 - Erforderliche Parameter: `description` (String) Inhalt, `target` (String) UUID des Lernziels der Info, `author` (String) UUID des Autors
 
 #### Relationen
 `GET /infos/:uuid/author` - Liefert User der die Info mit der UUID `uuid` erstellt hat
+
 `GET /infos/:uuid/target` - Liefert Lernziel dem die Info mit der UUID `uuid` angehört
+
 `GET /infos/:uuid/comments` - Liefert Kommentare für die Info mit der UUID `uuid`
 
 Infos können weder verändert noch gelöscht werden.
@@ -115,14 +126,18 @@ Infos können weder verändert noch gelöscht werden.
 ### <a name="lösung">Lösungen</a>
 #### Node Properties
 `GET /solutions` - Liefert Liste aller Lösungen
+
 `GET /solutions/:uuid` - Liefert Lösung mit UUID `uuid`
+
 `POST /infos` - Neue Infos erstellen
 
 - Erforderliche Parameter: `description` (String) Inhalt, `task` (String) UUID der Aufgabe der Lösung, `author` (String) UUID des Autors
 
 #### Relationen
 `GET /solutions/:uuid/author` - Liefert User der die Lösung mit der UUID `uuid` erstellt hat
+
 `GET /solutions/:uuid/task` - Liefert Aufgabe dem die Lösung mit der UUID `uuid` angehört
+
 `GET /solutions/:uuid/comments` - Liefert Kommentare für die Lösung mit der UUID `uuid`
 
 Lösungen können weder verändert noch gelöscht werden.
@@ -130,15 +145,20 @@ Lösungen können weder verändert noch gelöscht werden.
 ### <a name="benutzer">Benutzer</a>
 #### Node Properties
 `GET /users` - Liefert Liste aller User
+
 `GET /users/:uuid` - Liefert User mit UUID `uuid`
+
 `POST /users` - Neue Infos erstellen
 
 - Erforderliche Parameter: `username` (String) Names des neuen Nutzers
 
 #### Relationen
 `GET /users/:uuid/infos` - Liefert Infos des Users mit der UUID `uuid`
+
 `GET /users/:uuid/tasks/created` - Liefert erstellte Aufgaben des Users mit der UUID `uuid`
+
 `GET /users/:uuid/tasks/solved` - Liefert bearbeitete Aufgaben des Users mit der UUID `uuid`
+
 `GET /users/:uuid/solutions` - Liefert Lösungen des Usersmit der UUID `uuid`
 
 ## <a name="fehler">Fehler</a>
