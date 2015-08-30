@@ -1,6 +1,6 @@
 'use strict';
 
-var NEO4J_URL = process.env('NEO4J_URL');
+var NEO4J_URL = process.env.NEO4J_URL;
 
 module.exports = {
 

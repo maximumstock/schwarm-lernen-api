@@ -2,17 +2,16 @@
 
 /**
  * @file Modul zum Laden der Serverkonfiguration
-\b
  * Dieses Modul lädt die jeweilige Konfiguration basierend auf der Umgebungsvariable `NODE_ENV`.
  * Durch das Setzen der Umgebungsvariable `NODE_ENV` kann die Auswahl beeinflusst werden.
  */
 
 module.exports = function() {
-
   var config = {};
 
+  console.log(process.env.NODE_ENV);
   // `development` als Default, falls die Umgebungsvariable nicht gesetzt ist
-  switch (process.NODE_ENV || 'development') {
+  switch (process.env.NODE_ENV || 'development') {
     case 'development':
       config = require('./env/development');
       break;
@@ -24,6 +23,7 @@ module.exports = function() {
       break;
   }
 
+  console.log(config);
   return config;
 
 }(process.NODE_ENV);
