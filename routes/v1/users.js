@@ -6,14 +6,14 @@
 
 var express = require('express');
 var router = express.Router();
-var Comment = require('../../models/comment');
+var User = require('../../models/user');
 
 var apiVersion = '/api/v1';
 
-// Alle Kommentare zurückgeben
-router.get('/comments', function(req, res, next) {
+// Alle User zurückgeben
+router.get('/users', function(req, res, next) {
 
-  Comment.getAll(function(err, result) {
+  User.getAll(function(err, result) {
 
     if(err) return next(err);
     var ret = result.map(function(t) {
@@ -26,10 +26,10 @@ router.get('/comments', function(req, res, next) {
 
 });
 
-// Gibt einen bestimmten Kommentar zurück
-router.get('/comments/:uuid', function(req, res, next) {
+// Gibt einen bestimmten User zurück
+router.get('/users/:uuid', function(req, res, next) {
 
-  Comment.get(req.params.uuid, function(err, t) {
+  User.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
 
     t.addMetadata(apiVersion);
@@ -38,26 +38,12 @@ router.get('/comments/:uuid', function(req, res, next) {
 
 });
 
-// Gibt den Autor für einen bestimmten Kommentar zurück
-router.get('/comments/:uuid/author', function(req, res, next) {
+// Gibt alle Aufgaben des Users zurück
+router.get('/users/:uuid/tasks', function(req, res, next) {
 
-  Comment.get(req.params.uuid, function(err, s) {
+  User.get(req.params.uuid, function(err, s) {
     if(err) return next(err);
-    s.author(function(err, u) {
-      if(err) return next(err);
-      u.addMetadata(apiVersion);
-      res.json(u._node);
-    });
-  });
-
-});
-
-// Gibt das kommentierte Ziel eines Kommentars zurück
-router.get('/comments/:uuid/target', function(req, res, next) {
-
-  Comment.get(req.params.uuid, function(err, s) {
-    if(err) return next(err);
-    s.target(function(err, a) {
+    s.tasks(function(err, a) {
       if(err) return next(err);
       a.addMetadata(apiVersion);
       res.json(a._node);
@@ -66,21 +52,45 @@ router.get('/comments/:uuid/target', function(req, res, next) {
 
 });
 
-// Kommentar erstellen
-router.post('/comments', function(req, res, next) {
+// Gibt alle Infos des Users zurück
+router.get('/users/:uuid/infos', function(req, res, next) {
 
-  req.checkBody('description', 'Inhalt des Komentars fehlt').notEmpty();
-  req.checkBody('author', 'UUID des Autors fehlt').notEmpty();
-  req.checkBody('target', 'UUID des Ziels fehlt').notEmpty();
+  User.get(req.params.uuid, function(err, s) {
+    if(err) return next(err);
+    s.infos(function(err, a) {
+      if(err) return next(err);
+      a.addMetadata(apiVersion);
+      res.json(a._node);
+    });
+  });
+
+});
+
+// Gibt alle Lösungen des Users zurück
+router.get('/users/:uuid/solutions', function(req, res, next) {
+
+  User.get(req.params.uuid, function(err, s) {
+    if(err) return next(err);
+    s.solutions(function(err, a) {
+      if(err) return next(err);
+      a.addMetadata(apiVersion);
+      res.json(a._node);
+    });
+  });
+
+});
+
+// User erstellen
+router.post('/users', function(req, res, next) {
+
+  req.checkBody('username', 'Inhalt des Komentars fehlt').notEmpty();
 
   var errors = req.validationErrors();
   if(errors) return next(errors);
 
-  var authorUUID = req.body.author;
-  var targetUUID = req.body.target;
   var properties = req.body;
 
-  Comment.create(properties, targetUUID, authorUUID, function(err, s) {
+  User.create(properties, function(err, s) {
 
     if(err) return next(err);
     s.addMetadata(apiVersion);

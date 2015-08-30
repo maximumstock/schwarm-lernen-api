@@ -24,6 +24,7 @@ var Node = require('./node');
 var Task = require('./task');
 var Info = require('./info');
 var Solution = require('./solution');
+var User = require('./user');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
