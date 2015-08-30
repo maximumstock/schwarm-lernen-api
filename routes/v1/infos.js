@@ -7,8 +7,9 @@
 var express = require('express');
 var router = express.Router();
 var Info = require('../../models/info');
+var config = require('../../config/config');
 
-var apiVersion = '/api/v1';
+var apiVersion = config.HOST_URL + '/api/v1';
 
 // Alle Infos zurückgeben
 router.get('/infos', function(req, res, next) {

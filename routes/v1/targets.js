@@ -7,8 +7,9 @@
 var express = require('express');
 var router = express.Router();
 var Target = require('../../models/target');
+var config = require('../../config/config');
 
-var apiVersion = '/api/v1';
+var apiVersion = config.HOST_URL + '/api/v1';
 
 // Alle Lernziele zurückgeben
 router.get('/targets', function(req, res, next) {

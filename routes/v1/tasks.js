@@ -7,8 +7,9 @@
 var express = require('express');
 var router = express.Router();
 var Task = require('../../models/task');
+var config = require('../../config/config');
 
-var apiVersion = '/api/v1';
+var apiVersion = config.HOST_URL + '/api/v1';
 
 // Alle Aufgaben zurückgeben
 router.get('/tasks', function(req, res, next) {

@@ -7,8 +7,9 @@
 var express = require('express');
 var router = express.Router();
 var Degree = require('../../models/degree');
+var config = require('../../config/config');
 
-var apiVersion = '/api/v1';
+var apiVersion = config.HOST_URL + '/api/v1';
 
 // Alle Studiengänge zurückgeben
 router.get('/degrees', function(req, res, next) {

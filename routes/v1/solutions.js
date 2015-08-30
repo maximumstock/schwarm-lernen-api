@@ -7,8 +7,9 @@
 var express = require('express');
 var router = express.Router();
 var Solution = require('../../models/solution');
+var config = require('../../config/config');
 
-var apiVersion = '/api/v1';
+var apiVersion = config.HOST_URL + '/api/v1';
 
 // Alle Lösungen zurückgeben
 router.get('/solutions', function(req, res, next) {
