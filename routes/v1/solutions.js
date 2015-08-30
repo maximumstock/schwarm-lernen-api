@@ -1,5 +1,7 @@
+'use strict';
+
 /**
- * @file Routen für Aufgaben anlegen
+ * @file Routen für Lösungen anlegen
  */
 
 var express = require('express');
@@ -22,7 +24,7 @@ router.get('/solutions', function(req, res, next) {
 
   });
 
-})
+});
 
 // Gibt eine bestimmte Lösung zurück
 router.get('/solutions/:uuid', function(req, res, next) {
@@ -73,7 +75,7 @@ router.get('/solutions/:uuid/comments', function(req, res, next) {
       if(err) return next(err);
       comments = comments.map(function(c) {
         c.addMetadata(apiVersion);
-        return c._node; 
+        return c._node;
       });
       res.json(comments);
     });

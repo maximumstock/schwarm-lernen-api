@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * @file Routen für Lernziele anlegen
  */
@@ -22,9 +24,9 @@ router.get('/targets', function(req, res, next) {
 
   });
 
-})
+});
 
-// Gibt ein bestimmtes Lernziel, deren Targets/Aufgaben und die Parent-Node zurück
+// Gibt ein bestimmtes Lernziel zurück
 router.get('/targets/:uuid', function(req, res, next) {
 
   Target.get(req.params.uuid, function(err, t) {
@@ -123,7 +125,7 @@ router.put('/targets/:uuid', function(req, res, next) {
         t.changeParent(newParentUUID, function(err, nnt) {
           if(err) return next(err);
           return res.json(nnt);
-        })
+        });
       } else {
         res.json(nt);
       }

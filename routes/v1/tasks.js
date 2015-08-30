@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * @file Routen für Aufgaben anlegen
  */
@@ -22,7 +24,7 @@ router.get('/tasks', function(req, res, next) {
 
   });
 
-})
+});
 
 // Gibt eine bestimmte Aufgabe zurück
 router.get('/tasks/:uuid', function(req, res, next) {

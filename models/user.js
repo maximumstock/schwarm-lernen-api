@@ -243,7 +243,7 @@ User.prototype.ownTasks = function (callback) {
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {uuid}}-[:CREATED]->(t:Task)',
+    'MATCH (u:User {uuid: {uuid}})-[:CREATED]->(t:Task)',
     'RETURN t'
   ].join('\n');
 
@@ -272,7 +272,7 @@ User.prototype.solvedTasks = function (callback) {
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {uuid}}-[:CREATED]->(s:Solution)-[:SOLVES]->(t:Task)',
+    'MATCH (u:User {uuid: {uuid}})-[:CREATED]->(s:Solution)-[:SOLVES]->(t:Task)',
     'RETURN t'
   ].join('\n');
 

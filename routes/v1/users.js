@@ -38,15 +38,35 @@ router.get('/users/:uuid', function(req, res, next) {
 
 });
 
-// Gibt alle Aufgaben des Users zurück
-router.get('/users/:uuid/tasks', function(req, res, next) {
+// Gibt alle eigenen Aufgaben des Users zurück
+router.get('/users/:uuid/tasks/created', function(req, res, next) {
 
   User.get(req.params.uuid, function(err, s) {
     if(err) return next(err);
-    s.tasks(function(err, a) {
+    s.ownTasks(function(err, a) {
       if(err) return next(err);
-      a.addMetadata(apiVersion);
-      res.json(a._node);
+      a = a.map(function(i) {
+        i.addMetadata(apiVersion);
+        return i._node;
+      });
+      res.json(a);
+    });
+  });
+
+});
+
+// Gibt alle bearbeiteten Aufgaben des Users zurück
+router.get('/users/:uuid/tasks/solved', function(req, res, next) {
+
+  User.get(req.params.uuid, function(err, s) {
+    if(err) return next(err);
+    s.solvedTasks(function(err, a) {
+      if(err) return next(err);
+      a = a.map(function(i) {
+        i.addMetadata(apiVersion);
+        return i._node;
+      });
+      res.json(a);
     });
   });
 
@@ -59,8 +79,11 @@ router.get('/users/:uuid/infos', function(req, res, next) {
     if(err) return next(err);
     s.infos(function(err, a) {
       if(err) return next(err);
-      a.addMetadata(apiVersion);
-      res.json(a._node);
+      a = a.map(function(i) {
+        i.addMetadata(apiVersion);
+        return i._node;
+      });
+      res.json(a);
     });
   });
 

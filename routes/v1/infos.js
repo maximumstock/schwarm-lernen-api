@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * @file Routen für Infos anlegen
  */
@@ -22,7 +24,7 @@ router.get('/infos', function(req, res, next) {
 
   });
 
-})
+});
 
 // Gibt eine bestimmte Info zurück
 router.get('/infos/:uuid', function(req, res, next) {
@@ -64,19 +66,6 @@ router.get('/info/:uuid/target', function(req, res, next) {
 
 });
 
-// Gibt alle Bewertungen für eine bestimmte Info zurück
-router.get('/infos/:uuid/ratings', function(req, res, next) {
-
-  Info.get(req.params.uuid, function(err, s) {
-    if(err) return next(err);
-    s.ratings(function(err, ratings) {
-      if(err) return next(err);
-      res.json(ratings);
-    });
-  });
-
-});
-
 // Gibt alle Kommentare für eine bestimmte Info zurück
 router.get('/infos/:uuid/comments', function(req, res, next) {
 
@@ -89,20 +78,6 @@ router.get('/infos/:uuid/comments', function(req, res, next) {
   });
 
 });
-
-// Gibt das zugehörige Lernziel für eine bestimmte Info zurück
-router.get('/infos/:uuid/target', function(req, res, next) {
-
-  Info.get(req.params.uuid, function(err, s) {
-    if(err) return next(err);
-    s.target(function(err, target) {
-      if(err) return next(err);
-      res.json(target);
-    });
-  });
-
-});
-
 
 // Info erstellen
 router.post('/infos', function(req, res, next) {

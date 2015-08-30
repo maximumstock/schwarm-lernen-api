@@ -11,13 +11,13 @@ var targets = require('./targets');
 var tasks = require('./tasks');
 var solutions = require('./solutions');
 var infos = require('./infos');
-var comments = require('./comments');
+var users = require('./users');
 
 router.use('/', degrees);
 router.use('/', targets);
 router.use('/', tasks);
 router.use('/', solutions);
 router.use('/', infos);
-router.use('/', comments);
+router.use('/', users);
 
 module.exports = router;

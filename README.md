@@ -9,7 +9,7 @@ In diesem Dokument soll diese API näher beschrieben und dokumentiert werden.
 * Neo4J (Plugins: http://graphaware.com/products/)
 
 ## Fehler
-Üblicherweise sehen Fehler stets so aus: 
+Üblicherweise sehen Fehler stets so aus:
 
 	{
 		message: "Eine Klartextnachricht, die den Fehlerumstand beschreibt",
@@ -30,11 +30,11 @@ Als HTTP-Statusmeldungen werden verwendet:
 ## Routen
 Im Folgenden werden die einzelnen API-Endpunkte beschrieben.
 
-Bei allgemeinen Routen wie `/degrees`: **Properties**, **Labels**, **Ref** pro Element
-Bei spezifischen Routen wie `/degrees/{id}`: **Properties**, **Labels**, **Ref**, **L-1**, **L+1** (falls verfügbar)
+- Bei allgemeinen Routen wie `/degrees`: **Properties**, **Labels**, **Ref** pro Element
+- Bei spezifischen Routen wie `/degrees/{id}`: **Properties**, **Labels**, **Ref**, **Relationsebene darüber**, **Relationsebene darunter** (falls verfügbar)
 
 ### Allgemein
-Jede Instanz aller Ressourcen besitzt eine eindeutige UUID als Eigenschaft. Diese wird von der Datenbank bei der Erstellung einer neuen Node gesetzt. 
+Jede Instanz aller Ressourcen besitzt eine eindeutige UUID als Eigenschaft. Diese wird von der Datenbank bei der Erstellung einer neuen Node gesetzt.
 
 - Falls bei PUT-/POST-Requests `uuid` als Attribut im Request-Body gesendet wird: **400**, "ValidationError"
 
@@ -42,41 +42,31 @@ Jede Instanz aller Ressourcen besitzt eine eindeutige UUID als Eigenschaft. Dies
 Ein Studiengang ist der oberste Einstiegspunkt in unserer Hierarchie.
 
 #### Nodeinformationen
-**+**`GET /degrees` - Liefert alle Module
-**+**`GET /degrees/:uuid` - Liefert Studiengang mit ID `:uuid`
-
-- Falls `:uuid` nicht existiert: **404**, "StudiengangNotFound" 
-
+`GET /degrees` - Liefert alle Module
+`GET /degrees/:uuid` - Liefert Studiengang mit ID `:uuid`
 `POST /degrees` - Erstellt einen neuen Studiengang
 
 - Erforderliche Parameter: `name` (String)
-- Falls Studiengang bereits besteht: **409**, "StudiengangAlreadyExists"
+- Falls Studiengang bereits besteht: **409**, "DegreeAlreadyExists"
 - Falls Parameter fehlen **400**, "ValidationError"
 
 `PUT /degrees/:uuid` - Aktualisiert den Studiengang `:uuid`
 
-- Falls `:uuid` nicht existiert: **404**, "StudiengangNotFound"
-- Falls der neue Name von `:uuid` bereits existiert: **400**, "StudiengangAlreadyExists"
+- Falls der neue Name von `:uuid` bereits existiert: **409**, "DegreeAlreadyExists"
 
 `DELETE /degrees/:uuid` - Löscht den Studiengang `:uuid`
 
-- Falls `:uuid` nicht existiert: **404**, "StudiengangNotFound"
 - Falls am Studiengang `:uuid` Beziehungen (z.B. zu Lernzielen) hängen: **409**, "RemainingRelationships"
 
 #### Relationen
-`GET /degrees/:uuid/targets` - Liefert Liste aller Lernziele des Studiengangs `uuid`
+`GET /degrees/:uuid/targets` - Liefert Liste aller direkt benachbarten(!) Lernziele des Studiengangs `uuid`
 
-- Falls Studiengang `:uuid` nicht existiert: **404**, "StudiengangNotFound"
-
-### <a name="lernziele">Lernziele (Targets)</a>
+### <a name="lernziel">Lernziele (Targets)</a>
 Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an exakt einem(!) anderen Lernziel und teilt dessen Themenbereich auf.
 
 #### Node Properties
 `GET /targets` - Liefert Liste aller Lernziele
 `GET /targets/:uuid` - Liefert Lernziel `:uuid`
-
-- Falls `:uuid` nicht existiert: **404**, "LernzielNotFound"
-
 `POST /targets` - Erstellt ein neues Lernziel
 
 - Erforderliche Parameter: `name` (String), `parent` (String (UUID des Parents))
@@ -85,19 +75,71 @@ Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an 
 
 `PUT /targets/:uuid` - Aktualisiert Lernziel `:uuid`
 
-- Falls `:uuid` nicht existiert: **404**, "LernzielNotFound"
+- Falls `parent` gesetzt ist wird versucht die Parentnode entsprechend zu ändern
 
 `DELETE /targets/:uuid` - Löscht Lernziel `:uuid`
 
+#### Relationen
+`GET /targets/:uuid/children` - Liefert alle direkten Kindnodes (Lernziele bzw. Aufgaben) Lernziel `:uuid`
+`GET /targets/:uuid/parent` - Liefert Vaternode des Lernziel `:uuid`
+
+### <a name="aufgabe">Aufgaben</a>
+
+#### Node Properties
+`GET /tasks` - Liefert Liste aller Aufgaben
+`GET /tasks/:uuid` - Liefert Aufgabe mit UUID `uuid`
+`POST /tasks` - Neue Aufgaben erstellen
+
+- Erforderliche Parameter: `description` (String) Inhalt, `parent` (String) UUID des Lernziels der Aufgabe
 
 #### Relationen
+`GET /tasks/:uuid/solutions` - Liefert Liste aller Lösungen für Aufgabe `uuid`
 
-### <a name="aufgabe">Aufgabe</a>
-...
-### <a name="information">Information</a>
-...
-### <a name="lösung">Lösung</a>
-...
+Aufgaben können weder verändert noch gelöscht werden.
+
+### <a name="info">Infos</a>
+#### Node Properties
+`GET /infos` - Liefert Liste aller Infos
+`GET /infos/:uuid` - Liefert Info mit UUID `uuid`
+`POST /infos` - Neue Infos erstellen
+
+- Erforderliche Parameter: `description` (String) Inhalt, `target` (String) UUID des Lernziels der Info, `author` (String) UUID des Autors
+
+#### Relationen
+`GET /infos/:uuid/author` - Liefert User der die Info mit der UUID `uuid` erstellt hat
+`GET /infos/:uuid/target` - Liefert Lernziel dem die Info mit der UUID `uuid` angehört
+`GET /infos/:uuid/comments` - Liefert Kommentare für die Info mit der UUID `uuid`
+
+Infos können weder verändert noch gelöscht werden.
+
+### <a name="lösung">Lösungen</a>
+#### Node Properties
+`GET /solutions` - Liefert Liste aller Lösungen
+`GET /solutions/:uuid` - Liefert Lösung mit UUID `uuid`
+`POST /infos` - Neue Infos erstellen
+
+- Erforderliche Parameter: `description` (String) Inhalt, `task` (String) UUID der Aufgabe der Lösung, `author` (String) UUID des Autors
+
+#### Relationen
+`GET /solutions/:uuid/author` - Liefert User der die Lösung mit der UUID `uuid` erstellt hat
+`GET /solutions/:uuid/task` - Liefert Aufgabe dem die Lösung mit der UUID `uuid` angehört
+`GET /solutions/:uuid/comments` - Liefert Kommentare für die Lösung mit der UUID `uuid`
+
+Lösungen können weder verändert noch gelöscht werden.
+
 ### <a name="benutzer">Benutzer</a>
-...
+#### Node Properties
+`GET /users` - Liefert Liste aller User
+`GET /users/:uuid` - Liefert User mit UUID `uuid`
+`POST /users` - Neue Infos erstellen
+
+- Erforderliche Parameter: `username` (String) Names des neuen Nutzers
+
+#### Relationen
+`GET /users/:uuid/infos` - Liefert Infos des Users mit der UUID `uuid`
+`GET /users/:uuid/tasks/created` - Liefert erstellte Aufgaben des Users mit der UUID `uuid`
+`GET /users/:uuid/tasks/solved` - Liefert bearbeitete Aufgaben des Users mit der UUID `uuid`
+`GET /users/:uuid/solutions` - Liefert Lösungen des Usersmit der UUID `uuid`
+
 ## <a name="fehler">Fehler</a>
+soon tm
