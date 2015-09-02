@@ -214,7 +214,7 @@ User.prototype.infos = function (callback) {
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {uuid}}-[:CREATED]->(i:Info)',
+    'MATCH (u:User {uuid: {uuid}})-[:CREATED]->(i:Info)',
     'RETURN i'
   ].join('\n');
 

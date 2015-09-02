@@ -372,7 +372,7 @@ Target.prototype.children = function(depth, callback) {
   var self = this;
 
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[*1..'+parseInt(depth)+']->(c)',
+    'MATCH (t:Target {uuid: {uuid}})<-[*1..'+parseInt(depth)+']-(c)',
     'RETURN c'
   ].join('\n');
 

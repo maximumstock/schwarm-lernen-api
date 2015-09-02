@@ -23,6 +23,7 @@ var moment = require('moment');
 var Node = require('./node');
 var Task = require('./task');
 var Comment = require('./comment');
+var User = require('./user');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL

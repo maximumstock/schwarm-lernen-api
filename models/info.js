@@ -262,7 +262,6 @@ Info.prototype.ratings = function (callback) {
     params: params
   }, function (err, result) {
     if (err) return callback(err);
-
     callback(null, result);
   });
 
