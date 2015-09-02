@@ -37,22 +37,31 @@ User.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Kommentar-Nodes für Comment#create
 User.VALIDATION_INFO = {
+  username: {
+    required: true,
+    minLength: 5,
+    message: 'Muss einen Username haben.'
+  },
   password: {
     required: true,
-    minLength: 10,
-    message: 'Muss ein Passwort haben.'
+    minLength: 5,
+    message: 'Muss ein Passwort haben'
   }
 };
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
-/**
- * @function Propertydefinition für den Name des Users, welcher die UUID der Node ist
- * @prop {string} name Name des Users
- */
-Object.defineProperty(User.prototype, 'name', {
+//Propertydefinition für die UUID der Node ist
+Object.defineProperty(User.prototype, 'uuid', {
   get: function () {
     return this._node.properties.uuid;
+  }
+});
+
+// Propertydefinition für den Name des Users
+Object.defineProperty(User.prototype, 'name', {
+  get: function () {
+    return this._node.properties.name;
   }
 });
 
@@ -63,7 +72,11 @@ Object.defineProperty(User.prototype, 'name', {
 Object.defineProperty(User.prototype, 'password', {
   get: function () {
     return this._node.properties.password;
-  }
+  },
+  set: function (value) {
+    this._node.properties.password = value;
+  },
+  configurable: true
 });
 
 // Öffentliche Methoden
@@ -105,6 +118,39 @@ User.get = function (uuid, callback) {
 };
 
 /**
+ * @function findByUsername Statische Gettermethode für User per Username
+ * @param {string} username gesuchter Username
+ */
+User.findByUsername = function(username, callback) {
+
+  var query = [
+    'MATCH (u:User {username: {username}})',
+    'RETURN u'
+  ].join('\n');
+
+  var params = {
+    username: username
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function (err, result) {
+    if (err) return callback(err);
+    if (result.length === 0) {
+      err = new Error('Es wurde kein User `' + username + '` gefunden');
+      err.status = 404;
+      err.name = 'UserNotFound';
+      return callback(err);
+    }
+    // erstelle neue User-Instanz und gib diese zurück
+    var u = new User(result[0].u);
+    callback(null, u);
+  });
+
+};
+
+/**
  * @function get Statische Gettermethode für ALLE User
  * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
@@ -132,6 +178,32 @@ User.getAll = function (callback) {
 };
 
 /**
+ * @function Überprüft ob der User mit dem entsprechenden Usernamen bereits besteht
+ * @param {string} username Zu überprüfender Username
+ */
+User.isValidUsername = function(username, callback) {
+
+  var query = [
+    'MATCH (x:User {username: {username}})',
+    'RETURN x'
+  ].join('\n');
+
+  var params = {
+    username: username
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) return callback(null, true);
+    return callback(null, false);
+  });
+
+};
+
+/**
  * @function
  * @name create Erstellt einen neuen User und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
@@ -147,32 +219,46 @@ User.create = function (properties, callback) {
     return callback(e);
   }
 
-  properties.createdAt = parseInt(moment().format('X'));
-  // Passwort generieren
-  properties.password = pwgen(10, false, /\w/); // 10 Zeichen, not-mermorable, alpha-numerisch
+  // gewählten Nutzernamen überprüfen
+  User.isValidUsername(properties.username, function(err, bool) {
+    if(err) return callback(err);
+    if(!bool) {
+      // Username bereits verwendet
+      err = new Error('Username `' + properties.username + '` wird bereits verwendet');
+      err.status = 409;
+      err.name = 'UsernameAlreadyExists';
+      callback(err, null);
+    } else {
 
-  var query = [
-    'CREATE (u:User {properties})',
-    'return u'
-  ].join('\n');
+      // User erstellen
+      properties.createdAt = parseInt(moment().format('X'));
 
-  var params = {
-    properties: properties
-  };
+      var query = [
+        'CREATE (u:User {properties})',
+        'return u'
+      ].join('\n');
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
+      var params = {
+        properties: properties
+      };
 
-    if (err) return callback(err);
-    // hole gerade erstellten User aus der Datenbank
-    dbhelper.getNodeById(result[0].u._id, function (err, node) {
-      if (err) return callback(err);
-      // erstelle neue Userinstanz und gib diese zurück
-      var u = new User(node[0].u);
-      callback(null, u);
-    });
+      db.cypher({
+        query: query,
+        params: params
+      }, function (err, result) {
+
+        if (err) return callback(err);
+        // hole gerade erstellten User aus der Datenbank
+        dbhelper.getNodeById(result[0].u._id, function (err, node) {
+          if (err) return callback(err);
+          // erstelle neue Userinstanz und gib diese zurück
+          var u = new User(node[0].x);
+          callback(null, u);
+        });
+      });
+
+
+    }
   });
 
 };
@@ -299,6 +385,8 @@ User.prototype.solvedTasks = function (callback) {
  * @param {string} apiVersion Ein vorangestellter String zur Vervollständigung der URL
  */
 User.prototype.addMetadata = function (apiVersion) {
+
+  delete this._node.properties.password;
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/users/' + encodeURIComponent(this.uuid);
