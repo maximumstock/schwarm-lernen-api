@@ -104,26 +104,6 @@ router.get('/users/:uuid/solutions', function(req, res, next) {
 
 });
 
-// User erstellen
-router.post('/users', function(req, res, next) {
-
-  req.checkBody('username', 'Inhalt des Komentars fehlt').notEmpty();
-
-  var errors = req.validationErrors();
-  if(errors) return next(errors);
-
-  var properties = req.body;
-
-  User.create(properties, function(err, s) {
-
-    if(err) return next(err);
-    s.addMetadata(apiVersion);
-    res.status(201).json(s);
-
-  });
-
-});
-
 // TODO überhaupt iwas löschen/updaten?!
 
 module.exports = router;

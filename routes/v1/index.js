@@ -13,6 +13,16 @@ var solutions = require('./solutions');
 var infos = require('./infos');
 var users = require('./users');
 
+var register = require('./auth/register');
+var login = require('./auth/login');
+var auth = require('./auth/auth');
+
+// Registrierung- und Login-Endpunkte müssen öffentlich sein
+router.use('/', login);
+router.use('/', register);
+
+// API Routen
+router.use(auth); // API Routen mit Auth-Middleware schützen
 router.use('/', degrees);
 router.use('/', targets);
 router.use('/', tasks);

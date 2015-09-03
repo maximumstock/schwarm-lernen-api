@@ -11,7 +11,6 @@ var logger = require('morgan');
 var bodyParser = require('body-parser');
 var compression = require('compression');
 var validator = require('express-validator');
-var pwgen = require('password-generator');
 
 // Erstellen des Serverinstanz
 var app = express();
