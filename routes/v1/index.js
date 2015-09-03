@@ -22,7 +22,9 @@ router.use('/', login);
 router.use('/', register);
 
 // API Routen
-router.use(auth); // API Routen mit Auth-Middleware schützen
+if(!process.env.DISABLE_AUTH) {
+  router.use(auth); // API Routen mit Auth-Middleware schützen
+}
 router.use('/', degrees);
 router.use('/', targets);
 router.use('/', tasks);
