@@ -410,6 +410,40 @@ Target.prototype.children = function(depth, callback) {
 };
 
 /**
+ * @function Gibt alle zugeordneten Infos des Lernziels
+ * @return Array von Info-Objekten
+ */
+Target.prototype.infos = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t:Target {uuid: {uuid}})<-[:BELONGS_TO]-(i:Info)',
+    'RETURN i'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, infos) {
+
+    if(err) return callback(err);
+
+    infos = infos.map(function(i) {
+      return new Info(i.i);
+    });
+
+    callback(null, infos);
+
+  });
+
+};
+
+/**
  * @function Fügt Metadaten hinzu
  * @param {string} apiVersion Ein vorangestellter String zur Vervollständigung der URL
  */
@@ -420,5 +454,6 @@ Target.prototype.addMetadata = function(apiVersion) {
   this._node.ref = base;
   this._node.children = base + '/children';
   this._node.parent = base + '/parent';
+  this._node.infos = base + '/infos';
 
 };

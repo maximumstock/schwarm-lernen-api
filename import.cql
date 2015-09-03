@@ -17,7 +17,7 @@ match (d:Degree {name: "Informatik"}) with range(1,20) as RANGE, d foreach(r in 
 match (u:User), (t:Target) where rand() < 0.05 create (u)-[:CREATED]->(ta:Task)-[:BELONGS_TO]->(t);
 
 // Infos
-match (u:User), (t:Target) where rand() < 0.01 create (u)-[:CREATED]->(i:Info)-[:BELONGS_TO]->(t);
+match (u:User), (t:Target) where rand() < 0.1 create (u)-[:CREATED]->(i:Info)-[:BELONGS_TO]->(t);
 
 // Lösungen
 match (u:User), (t:Task) where rand() < 0.05 create (u)-[:CREATED]->(s:Solution)-[:SOLVES]->(t);

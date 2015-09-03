@@ -73,6 +73,23 @@ router.get('/targets/:uuid/parent', function(req, res, next) {
 
 });
 
+// Gibt alle Infos für das Lernziel
+router.get('/targets/:uuid/infos', function(req, res, next) {
+
+  Target.get(req.params.uuid, function(err, t) {
+    if(err) return next(err);
+    t.infos(function(err, infos) {
+      if(err) return next(err);
+      infos = infos.map(function(i) {
+        i.addMetadata(apiVersion);
+        return i._node;
+      });
+      res.json(infos);
+    });
+  });
+
+});
+
 // Lernziel erstellen
 router.post('/targets', function(req, res, next) {
 
