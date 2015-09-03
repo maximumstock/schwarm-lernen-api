@@ -9,6 +9,8 @@ var router = express.Router();
 var Degree = require('../../models/degree');
 var config = require('../../config/config');
 
+var auth = require('./auth/auth');
+
 var apiVersion = config.HOST_URL + '/api/v1';
 
 // Alle Studiengänge zurückgeben
@@ -56,7 +58,7 @@ router.get('/degrees/:uuid/targets', function(req, res, next) {
 });
 
 // Studiengang erstellen
-router.post('/degrees', function(req, res, next) {
+router.post('/degrees', auth.adminOnly, function(req, res, next) {
 
   Degree.create(req.body, function(err, result) {
     if (err) return next(err);
@@ -67,7 +69,7 @@ router.post('/degrees', function(req, res, next) {
 });
 
 // Studiengang löschen
-router.delete('/degrees/:uuid', function(req, res, next) {
+router.delete('/degrees/:uuid', auth.adminOnly, function(req, res, next) {
 
   Degree.get(req.params.uuid, function(err, d) {
     if (err) return next(err);
@@ -82,7 +84,7 @@ router.delete('/degrees/:uuid', function(req, res, next) {
 });
 
 // Studiengang aktualisieren
-router.put('/degrees/:uuid', function(req, res, next) {
+router.put('/degrees/:uuid', auth.adminOnly, function(req, res, next) {
 
   Degree.get(req.params.uuid, function(err, d) {
     if (err) return next(err);

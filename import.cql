@@ -40,3 +40,10 @@ foreach (s in solutions | delete s);
 
 // User ohne Zugang
 with range(1,5) as RANGE foreach(r in RANGE | create (u:User));
+
+
+// TEST STUFF
+// DELETE IN PRODUCTION
+// Testuser bene
+match (d:Degree)
+create (u:User {username: "admin", password: "admin"})-[:HAS_ACCESS]->(d);

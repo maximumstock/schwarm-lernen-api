@@ -39,7 +39,7 @@ User.prototype = Object.create(Node.prototype);
 User.VALIDATION_INFO = {
   username: {
     required: true,
-    minLength: 5,
+    minLength: 4,
     message: 'Muss einen Username haben.'
   },
   password: {
@@ -264,6 +264,15 @@ User.create = function (properties, callback) {
 };
 
 // Instanzmethoden
+
+/**
+ * @function Gibt an ob der User ein Admin ist
+ */
+User.prototype.isAdmin = function () {
+
+  return this._node.labels.indexOf('Admin') > -1;
+
+};
 
 /**
  * @function Gibt alle Kommentare dieses Users zurück
