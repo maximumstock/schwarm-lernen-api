@@ -400,9 +400,16 @@ Target.prototype.children = function(depth, callback) {
       return new Target(c.c);
     });
 
+    var infos = children.filter(function(c) {
+      return c.c.labels.indexOf('Info') > -1;
+    }).map(function(c) {
+      return new Info(c.c);
+    });
+
     callback(null, {
       tasks: tasks,
-      targets: targets
+      targets: targets,
+      infos: infos
     });
 
   });
