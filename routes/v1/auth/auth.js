@@ -15,6 +15,11 @@ var User = require('../../../models/user');
  */
 exports.auth = function(req, res, next) {
 
+  // falls Authentifizierung ausgeschaltet wurde
+  if(config.DISABLE_AUTH) {
+    return next();
+  }
+
   // Token aus HTTP-Header, URL-Query oder POST-Body lesen
   var token = req.body.token || req.query.token || req.headers['x-access-token'];
 

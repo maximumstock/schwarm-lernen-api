@@ -22,23 +22,12 @@ router.use('/', login);
 router.use('/', register);
 
 // API Routen
-if(!process.env.DISABLE_AUTH) {
-  // Mit Authentifizierung
-  router.use(auth.auth); // API Routen mit Auth-Middleware schützen
-  router.use('/', degrees); // Degrees nur durch Admins erstell-/änderbar (siehe degrees.js)
-  router.use('/', targets);
-  router.use('/', tasks);
-  router.use('/', solutions);
-  router.use('/', infos);
-  router.use('/', users); // User nur durch Admins erstellbar (siehe auth/register.js)
-} else {
-  // Ohne Authentifizierung
-  router.use('/', auth.degrees);
-  router.use('/', targets);
-  router.use('/', tasks);
-  router.use('/', solutions);
-  router.use('/', infos);
-  router.use('/', users);
-}
+router.use(auth.auth); // API Routen mit Auth-Middleware schützen
+router.use('/', degrees); // Degrees nur durch Admins erstell-/änderbar (siehe degrees.js)
+router.use('/', targets);
+router.use('/', tasks);
+router.use('/', solutions);
+router.use('/', infos);
+router.use('/', users); // User nur durch Admins erstellbar (siehe auth/register.js)
 
 module.exports = router;

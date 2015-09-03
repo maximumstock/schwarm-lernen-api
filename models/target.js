@@ -185,7 +185,7 @@ Target.create = function(properties, parentUUID, callback) {
     dbhelper.getNodeById(id, function(err, result) {
       if(err) return callback(err);
       // erstelle neue Lernzielinstanz und gib diese zurück
-      var t = new Target(result[0].t);
+      var t = new Target(result[0].x);
       callback(null, t);
     });
 
