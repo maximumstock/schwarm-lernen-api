@@ -145,7 +145,7 @@ User.findByUsername = function(username, callback) {
       return callback(err);
     }
     // erstelle neue User-Instanz und gib diese zurück
-    var u = new User(result[0]);
+    var u = new User(result[0].u);
     callback(null, u);
   });
 
