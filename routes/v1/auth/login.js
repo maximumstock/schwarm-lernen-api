@@ -31,7 +31,7 @@ router.post('/login', function(req, res, next) {
     } else {
 
       // falls Passwort übereinstimmt
-      delete user._node.properties.password; // Passwort-Property sollte nicht mitgeschickt werden
+      delete user.properties.password; // Passwort-Property sollte nicht mitgeschickt werden
       var token = jwt.sign(user, config.API_SECRET, {
         expiresInMintues: 1440 // 24 Stunden
       });
