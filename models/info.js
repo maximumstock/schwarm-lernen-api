@@ -22,6 +22,7 @@ var moment = require('moment');
 
 var Node = require('./node');
 var Target = require('./target');
+var User = require('./user');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -40,7 +41,6 @@ Info.VALIDATION_INFO = {
   },
   description: {
     required: true,
-    minLength: 10,
     message: 'Muss eine Beschreibung haben'
   }
 };
@@ -53,7 +53,17 @@ Info.VALIDATION_INFO = {
  */
 Object.defineProperty(Info.prototype, 'description', {
   get: function () {
-    return this._node.properties.description;
+    return this.properties.description;
+  }
+});
+
+/**
+ * @function Propertydefinition für den Autor der Info als Userobjekt
+ * @prop {object} author Autor der Info
+ */
+Object.defineProperty(Info.prototype, 'author', {
+  get: function () {
+    return this.properties.author;
   }
 });
 
@@ -69,8 +79,9 @@ Object.defineProperty(Info.prototype, 'description', {
 Info.get = function (uuid, callback) {
 
   var query = [
-    'MATCH (i:Info {uuid: {uuid}})',
-    'RETURN i'
+    'MATCH (creator:User)-[CREATED]->(i:Info {uuid: {uuid}})',
+    'OPTIONAL MATCH (i)<-[r:RATES]-(u:User)',
+    'RETURN i, creator, avg(r.rating) as rating, length(collect(r)) as votes'
   ].join('\n');
 
   var params = {
@@ -89,6 +100,9 @@ Info.get = function (uuid, callback) {
       return callback(err);
     }
     // erstelle neue Info-Instanz und gib diese zurück
+    result[0].i.properties.rating = result[0].rating;
+    result[0].i.properties.votes = result[0].votes;
+    result[0].i.properties.author = new User(result[0].creator);
     var i = new Info(result[0].i);
     callback(null, i);
   });
@@ -102,8 +116,9 @@ Info.get = function (uuid, callback) {
 Info.getAll = function (callback) {
 
   var query = [
-    'MATCH (i:Info)',
-    'RETURN i'
+    'MATCH (creator:User)-[CREATED]->(i:Info)',
+    'OPTIONAL MATCH (i)<-[r:RATES]-(u:User)',
+    'RETURN i, creator, avg(r.rating) as rating, length(collect(r)) as votes'
   ].join('\n');
 
   db.cypher({
@@ -113,8 +128,10 @@ Info.getAll = function (callback) {
 
     // Erstelle ein Array von Infos aus dem Ergebnisdokument
     var infos = result.map(function (e) {
-      var i = new Info(e.i);
-      return i;
+      e.i.properties.rating = e.rating;
+      e.i.properties.votes = e.votes;
+      e.i.properties.author = new User(e.creator);
+      return new Info(e.i);
     });
 
     callback(null, infos);
@@ -188,7 +205,7 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
 /**
  * @function Gibt zugehöriges Target zu dieser Info zurück
  */
-Info.prototype.target = function (callback) {
+Info.prototype.getTarget = function (callback) {
 
   var self = this;
 
@@ -217,7 +234,7 @@ Info.prototype.target = function (callback) {
 /**
  * @function Gibt den Autor zurück
  */
-Info.prototype.author = function (callback) {
+Info.prototype.getAuthor = function (callback) {
 
   var self = this;
 
@@ -242,35 +259,9 @@ Info.prototype.author = function (callback) {
 };
 
 /**
- * @function Gibt alle Ratings zu dieser Info zurück
- */
-Info.prototype.ratings = function (callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (i:Info {uuid: {uuid}})<-[r:RATES]-()',
-    'RETURN r'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-    callback(null, result);
-  });
-
-};
-
-/**
  * @function Gibt alle Kommentare zu dieser Info zurück
  */
-Info.prototype.comments = function (callback) {
+Info.prototype.getComments = function (callback) {
 
   var self = this;
 
@@ -302,9 +293,13 @@ Info.prototype.addMetadata = function (apiVersion) {
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/infos/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.author = base + '/author';
-  this._node.ratings = base + '/ratings';
-  this._node.target = base + '/target';
+
+  var links = {};
+  links.ref = base;
+  links.author = base + '/author';
+  links.ratings = base + '/ratings';
+  links.target = base + '/target';
+
+  this.links = links;
 
 };

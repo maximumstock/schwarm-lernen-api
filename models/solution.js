@@ -35,14 +35,8 @@ Solution.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Loesungs-Nodes für Loesung#create
 Solution.VALIDATION_INFO = {
-  author: {
-    required: true,
-    minLength: 36,
-    message: 'Muss einen Autor haben.'
-  },
   description: {
     required: true,
-    minLength: 10,
     message: 'Muss eine Beschreibung haben'
   }
 };
@@ -55,7 +49,17 @@ Solution.VALIDATION_INFO = {
  */
 Object.defineProperty(Solution.prototype, 'description', {
   get: function () {
-    return this._node.properties.description;
+    return this.properties.description;
+  }
+});
+
+/**
+ * @function Propertydefinition für den Autor der Loesung als Userobjekt
+ * @prop {object} author Author der Lösung
+ */
+Object.defineProperty(Solution.prototype, 'author', {
+  get: function () {
+    return this.properties.author;
   }
 });
 
@@ -71,8 +75,9 @@ Object.defineProperty(Solution.prototype, 'description', {
 Solution.get = function (uuid, callback) {
 
   var query = [
-    'MATCH (s:Solution {uuid: {uuid}})',
-    'RETURN s'
+    'MATCH (creator:User)-[:CREATED]->(s:Solution {uuid: {uuid}})',
+    'OPTIONAL MATCH (s)<-[r:RATES]-(u:User)',
+    'RETURN s, creator, avg(r.rating) as rating, length(collect(r)) as votes'
   ].join('\n');
 
   var params = {
@@ -91,6 +96,9 @@ Solution.get = function (uuid, callback) {
       return callback(err);
     }
     // erstelle neue Lösungs-Instanz und gib diese zurück
+    result[0].s.properties.rating = result[0].rating;
+    result[0].s.properties.votes = result[0].votes;
+    result[0].s.properties.author = new User(result[0].creator);
     var l = new Solution(result[0].s);
     callback(null, l);
   });
@@ -104,22 +112,22 @@ Solution.get = function (uuid, callback) {
 Solution.getAll = function (callback) {
 
   var query = [
-    'MATCH (s:Solution)',
-    'RETURN s'
+    'MATCH (creator:User)-[:CREATED]->(s:Solution)',
+    'OPTIONAL MATCH (s)<-[r:RATES]-(u:User)',
+    'RETURN s, creator, avg(r.rating) as rating, length(collect(r)) as votes'
   ].join('\n');
 
   db.cypher({
     query: query
   }, function (err, result) {
     if (err) return callback(err);
-
     // Erstelle ein Array von Lösungen aus dem Ergebnisdokument
-    var loesungen = [];
-    result.forEach(function (e) {
-      var l = new Solution(e.s);
-      loesungen.push(l);
+    var loesungen = result.map(function (e) {
+      e.s.properties.rating = e.rating;
+      e.s.properties.votes = e.votes;
+      e.s.properties.author = new User(e.creator);
+      return new Solution(e.s);
     });
-
     callback(null, loesungen);
   });
 
@@ -188,7 +196,7 @@ Solution.create = function (properties, taskUUID, userUUID, callback) {
 /**
  * @function Gibt zugehörige Aufgabe zu dieser Lösung zurück
  */
-Solution.prototype.task = function (callback) {
+Solution.prototype.getTask = function (callback) {
 
   var self = this;
 
@@ -217,7 +225,7 @@ Solution.prototype.task = function (callback) {
 /**
  * @function Gibt den Autor zurück
  */
-Solution.prototype.author = function (callback) {
+Solution.prototype.getAuthor = function (callback) {
 
   var self = this;
 
@@ -244,7 +252,7 @@ Solution.prototype.author = function (callback) {
 /**
  * @function Gibt alle Kommentare zu dieser Lösung zurück
  */
-Solution.prototype.comments = function (callback) {
+Solution.prototype.getComments = function (callback) {
 
   var self = this;
 
@@ -280,9 +288,12 @@ Solution.prototype.addMetadata = function (apiVersion) {
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/solutions/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.author = base + '/author';
-  this._node.comments = base + '/comments';
-  this._node.task = base + '/task';
+
+  var links = {};
+  links.ref = base;
+  links.author = base + '/author';
+  links.comments = base + '/comments';
+  links.task = base + '/task';
+  this.links = links;
 
 };

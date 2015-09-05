@@ -11,6 +11,7 @@
  */
 var User = module.exports = function User(_node) {
   Node.apply(this, arguments);
+  this.isAdmin = this.isAdmin();
 };
 
 var neo4j = require('neo4j');
@@ -39,7 +40,7 @@ User.prototype = Object.create(Node.prototype);
 User.VALIDATION_INFO = {
   username: {
     required: true,
-    minLength: 4,
+    minLength: 3,
     message: 'Muss einen Username haben.'
   },
   password: {
@@ -54,14 +55,14 @@ User.VALIDATION_INFO = {
 //Propertydefinition für die UUID der Node ist
 Object.defineProperty(User.prototype, 'uuid', {
   get: function () {
-    return this._node.properties.uuid;
+    return this.properties.uuid;
   }
 });
 
 // Propertydefinition für den Name des Users
-Object.defineProperty(User.prototype, 'name', {
+Object.defineProperty(User.prototype, 'username', {
   get: function () {
-    return this._node.properties.name;
+    return this.properties.username;
   }
 });
 
@@ -71,10 +72,10 @@ Object.defineProperty(User.prototype, 'name', {
  */
 Object.defineProperty(User.prototype, 'password', {
   get: function () {
-    return this._node.properties.password;
+    return this.properties.password;
   },
   set: function (value) {
-    this._node.properties.password = value;
+    this.properties.password = value;
   },
   configurable: true
 });
@@ -144,7 +145,7 @@ User.findByUsername = function(username, callback) {
       return callback(err);
     }
     // erstelle neue User-Instanz und gib diese zurück
-    var u = new User(result[0].u);
+    var u = new User(result[0]);
     callback(null, u);
   });
 
@@ -168,10 +169,8 @@ User.getAll = function (callback) {
 
     // Erstelle ein Array von Usern aus dem Ergebnisdokument
     var users = result.map(function (e) {
-      var u = new User(e.u);
-      return u;
+      return new User(e.u);
     });
-
     callback(null, users);
   });
 
@@ -270,7 +269,7 @@ User.create = function (properties, callback) {
  */
 User.prototype.isAdmin = function () {
 
-  return this._node.labels.indexOf('Admin') > -1;
+  return this.labels.indexOf('Admin') > -1;
 
 };
 
@@ -395,14 +394,17 @@ User.prototype.solvedTasks = function (callback) {
  */
 User.prototype.addMetadata = function (apiVersion) {
 
-  delete this._node.properties.password;
+  delete this.properties.password;
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/users/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.comments = base + '/comments';
-  this._node.ownTasks = base + '/tasks/created';
-  this._node.solvedTasks = base + '/tasks/solved';
-  this._node.infos = base + '/infos';
+
+  var links = {};
+  links.ref = base;
+  links.ownTasks = base + '/tasks/created';
+  links.solvedTasks = base + '/tasks/solved';
+  links.infos = base + '/infos';
+
+  this.links = links;
 
 };

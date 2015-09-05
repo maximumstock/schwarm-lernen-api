@@ -17,11 +17,10 @@ router.get('/users', function(req, res, next) {
   User.getAll(function(err, result) {
 
     if(err) return next(err);
-    var ret = result.map(function(t) {
+    result.forEach(function(t) {
       t.addMetadata(apiVersion);
-      return t._node;
     });
-    res.json(ret);
+    res.json(result);
 
   });
 
@@ -32,9 +31,8 @@ router.get('/users/:uuid', function(req, res, next) {
 
   User.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
-
     t.addMetadata(apiVersion);
-    res.json(t._node);
+    res.json(t);
   });
 
 });
@@ -46,9 +44,8 @@ router.get('/users/:uuid/tasks/created', function(req, res, next) {
     if(err) return next(err);
     s.ownTasks(function(err, a) {
       if(err) return next(err);
-      a = a.map(function(i) {
+      a.forEach(function(i) {
         i.addMetadata(apiVersion);
-        return i._node;
       });
       res.json(a);
     });
@@ -63,9 +60,8 @@ router.get('/users/:uuid/tasks/solved', function(req, res, next) {
     if(err) return next(err);
     s.solvedTasks(function(err, a) {
       if(err) return next(err);
-      a = a.map(function(i) {
+      a.forEach(function(i) {
         i.addMetadata(apiVersion);
-        return i._node;
       });
       res.json(a);
     });
@@ -80,9 +76,8 @@ router.get('/users/:uuid/infos', function(req, res, next) {
     if(err) return next(err);
     s.infos(function(err, a) {
       if(err) return next(err);
-      a = a.map(function(i) {
+      a.forEach(function(i) {
         i.addMetadata(apiVersion);
-        return i._node;
       });
       res.json(a);
     });
@@ -98,7 +93,7 @@ router.get('/users/:uuid/solutions', function(req, res, next) {
     s.solutions(function(err, a) {
       if(err) return next(err);
       a.addMetadata(apiVersion);
-      res.json(a._node);
+      res.json(a);
     });
   });
 

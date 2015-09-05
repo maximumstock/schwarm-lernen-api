@@ -119,10 +119,8 @@ Target.getAll = function(callback) {
     if (err) return callback(err);
 
     // Erstelle ein Array von Lernzielen aus dem Ergebnisdokument
-    var lernziele = [];
-    result.forEach(function(e) {
-      var m = new Target(e.t);
-      lernziele.push(m);
+    var lernziele = result.map(function(e) {
+      return new Target(e.t);
     });
 
     callback(null, lernziele);
@@ -387,7 +385,7 @@ Target.prototype.children = function(depth, callback) {
 
     if(err) return callback(err);
 
-    // Children nach Label sortieren, also nach `Aufgabe`, `Lernziel`, etc.
+    // Children nach Label sortieren, also nach `Aufgabe`, `Lernziel`, `Info` etc.
     var tasks = children.filter(function(c) {
       return c.c.labels.indexOf('Task') > -1;
     }).map(function(c) {
@@ -451,6 +449,75 @@ Target.prototype.infos = function(callback) {
 };
 
 /**
+ * @function Gibt alle zugeordneten Aufgaben des Lernziels
+ * @return Array von Task-Objekten
+ */
+Target.prototype.tasks = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t2:Target {uuid: {uuid}})<-[:BELONGS_TO]-(t:Task)',
+    'RETURN t'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, tasks) {
+
+    if(err) return callback(err);
+
+    tasks = tasks.map(function(i) {
+      return new Task(i.t);
+    });
+
+    callback(null, tasks);
+
+  });
+
+};
+
+/**
+ * @function Gibt alle weiteren Lernziele auf {depth}. Ebene des Lernziels
+ * @param number {depth} Tiefe der Baumstruktur in der Lernziele gesucht werden sollen
+ * @return Array von Lernziel-Objekten
+ */
+Target.prototype.targets = function(depth, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t2:Target {uuid: {uuid}})<-[:PART_OF]-(t:Target)',
+    'RETURN t'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, targets) {
+
+    if(err) return callback(err);
+
+    targets = targets.map(function(i) {
+      return new Target(i.t);
+    });
+
+    callback(null, targets);
+
+  });
+
+};
+
+/**
  * @function Fügt Metadaten hinzu
  * @param {string} apiVersion Ein vorangestellter String zur Vervollständigung der URL
  */
@@ -458,9 +525,14 @@ Target.prototype.addMetadata = function(apiVersion) {
 
   apiVersion = apiVersion || '';
   var base = apiVersion + '/targets/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.children = base + '/children';
-  this._node.parent = base + '/parent';
-  this._node.infos = base + '/infos';
+
+  var links = {};
+  links.ref = base;
+  links.children = base + '/children';
+  links.parent = base + '/parent';
+  links.infos = base + '/infos';
+  links.tasks = base + '/tasks';
+  links.targets = base + '/targets';
+  this.links = links;
 
 };

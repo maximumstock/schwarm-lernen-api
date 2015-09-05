@@ -21,6 +21,8 @@ var moment = require('moment');
 
 var Node = require('./node');
 var Solution = require('./solution');
+var Comment = require('./comment');
+var User = require('./user');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -34,7 +36,6 @@ Task.prototype = Object.create(Node.prototype);
 Task.VALIDATION_INFO = {
   description: {
     required: true,
-    minLength: 20,
     message: 'Muss eine Beschreibung haben.'
   }
 };
@@ -42,12 +43,20 @@ Task.VALIDATION_INFO = {
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
 /**
- * @function Propertydefinition für die Beschreibung der Aufgabe
  * @prop {string} description Beschreibung der Aufgabe
  */
 Object.defineProperty(Task.prototype, 'description', {
   get: function() {
-    return this._node.properties.description;
+    return this.properties.description;
+  }
+});
+
+/**
+ * @prop {object} author Autor der Aufgabe als Userobjekt
+ */
+Object.defineProperty(Task.prototype, 'author', {
+  get: function() {
+    return this.properties.author;
   }
 });
 
@@ -63,8 +72,9 @@ Object.defineProperty(Task.prototype, 'description', {
 Task.get = function(uuid, callback) {
 
   var query = [
-    'MATCH (a:Task {uuid: {uuid}})',
-    'RETURN a'
+    'MATCH (creator:User)-[:CREATED]->(a:Task {uuid: {uuid}})',
+    'OPTIONAL MATCH (a)<-[r:RATES]-(u:User)',
+    'RETURN a, creator, avg(r.rating) as rating, length(collect(r)) as votes'
   ].join('\n');
 
   var params = {
@@ -83,6 +93,9 @@ Task.get = function(uuid, callback) {
       return callback(err);
     }
     // erstelle neue Aufgabe-Instanz und gib diese zurück
+    result[0].a.properties.rating = result[0].rating;
+    result[0].a.properties.votes = result[0].votes;
+    result[0].a.properties.author = new User(result[0].creator);
     var a = new Task(result[0].a);
     callback(null, a);
   });
@@ -96,8 +109,9 @@ Task.get = function(uuid, callback) {
 Task.getAll = function(callback) {
 
   var query = [
-    'MATCH (a:Task)',
-    'RETURN a'
+    'MATCH (creator:User)-[:CREATED]->(a:Task)',
+    'OPTIONAL MATCH (a)<-[r:RATES]-(u:User)',
+    'RETURN a, creator, avg(r.rating) as rating, length(collect(r)) as votes'
   ].join('\n');
 
   db.cypher({
@@ -106,10 +120,11 @@ Task.getAll = function(callback) {
     if (err) return callback(err);
 
     // Erstelle ein Array von Aufgaben aus dem Ergebnisdokument
-    var aufgaben = [];
-    result.forEach(function(e) {
-      var m = new Task(e.a);
-      aufgaben.push(m);
+    var aufgaben = result.map(function(e) {
+      e.a.properties.rating = e.rating;
+      e.a.properties.votes = e.votes;
+      e.a.properties.author = new User(e.creator);
+      return new Task(e.a);
     });
 
     callback(null, aufgaben);
@@ -122,12 +137,12 @@ Task.getAll = function(callback) {
  * @name create Erstellt eine neue Aufgabe und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} parentUUID UUID der Parent-Node, an die die Aufgabe gehängt werden soll
+ * @param {string} authorUUID UUID des Autors der Aufgabe
  * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
  */
-Task.create = function(properties, parentUUID, callback) {
+Task.create = function(properties, parentUUID, authorUUID, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem:
   try {
     properties = validate.validate(Task.VALIDATION_INFO, properties, true);
   } catch(e) {
@@ -137,15 +152,16 @@ Task.create = function(properties, parentUUID, callback) {
   properties.createdAt = parseInt(moment().format('X'));
 
   var query = [
-    'MATCH (dt:Target {uuid: {parent}})',
+    'MATCH (dt:Target {uuid: {parent}}), (u:User {uuid: {author}})',
     'CREATE (a:Task {properties})',
-    'CREATE UNIQUE (a)-[r:BELONGS_TO]->(dt)',
+    'CREATE UNIQUE (u)-[:CREATED]->(a)-[r:BELONGS_TO]->(dt)',
     'return a'
   ].join('\n');
 
   var params = {
     properties: properties,
-    parent: parentUUID
+    parent: parentUUID,
+    author: authorUUID
   };
 
   db.cypher({
@@ -275,6 +291,33 @@ Task.prototype.patch = function(properties, callback) {
 
 };
 
+/**
+ * @function Gibt den Autor zurück
+ */
+Task.prototype.getAuthor = function (callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t:Task {uuid: {uuid}})<-[:CREATED]-(u:User)',
+    'RETURN u'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function (err, result) {
+    if (err) return callback(err);
+    var u = new User(result[0].u);
+    callback(null, u);
+  });
+
+};
+
 
 /**
  * @function Löscht die alte Parent-Beziehung zwischen dieser Aufgaben und dessen Lernziel und
@@ -313,7 +356,7 @@ Task.prototype.changeParent = function(newParent, callback) {
 /**
  * @function Gibt alle zugehörigen Lösungen zu dieser Aufgabe zurück
  */
-Task.prototype.solutions = function(callback) {
+Task.prototype.getSolutions = function(callback) {
 
   var self = this;
 
@@ -332,11 +375,41 @@ Task.prototype.solutions = function(callback) {
   }, function(err, result) {
 
     if(err) return callback(err);
-    var solutions = [];
-    result.forEach(function(i) {
-      solutions.push(new Solution(i.s));
+    var solutions = result.map(function(i) {
+      return new Solution(i.s);
     });
     callback(null, solutions);
+
+  });
+
+};
+
+/**
+ * @function Gibt alle zugehörigen Kommentare zu dieser Aufgabe zurück
+ */
+Task.prototype.getComments = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (a:Task {uuid: {uuid}})<-[r:BELONGS_TO]-(c:Comment)',
+    'RETURN c'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+
+    if(err) return callback(err);
+    var comments = result.map(function(i) {
+      return new Comment(i.c);
+    });
+    callback(null, comments);
 
   });
 
@@ -350,8 +423,13 @@ Task.prototype.addMetadata = function(apiVersion) {
 
   apiVersion = apiVersion || '';
   var base = apiVersion + '/tasks/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.solutions = base + '/solutions';
-  this._node.parent = base + '/parent';
+  var links = {};
+  links.ref = base;
+  links.author = base + '/author';
+  links.solutions = base + '/solutions';
+  links.comments = base + '/comments';
+  links.parent = base + '/parent';
+
+  this.links = links;
 
 };

@@ -43,7 +43,6 @@ Comment.VALIDATION_INFO = {
   },
   description: {
     required: true,
-    minLength: 10,
     message: 'Muss eine Beschreibung haben'
   }
 };
@@ -56,7 +55,17 @@ Comment.VALIDATION_INFO = {
  */
 Object.defineProperty(Comment.prototype, 'description', {
   get: function () {
-    return this._node.properties.description;
+    return this.properties.description;
+  }
+});
+
+/**
+ * @function Propertydefinition für den Autor des Kommentars als Userobjekt
+ * @prop {object} author Autor des Kommentars
+ */
+Object.defineProperty(Comment.prototype, 'author', {
+  get: function () {
+    return this.properties.author;
   }
 });
 
@@ -208,7 +217,7 @@ Comment.create = function (properties, targetUUID, userUUID, callback) {
 /**
  * @function Gibt zugehörige Node, welche durch diesen Kommentar kommentiert wurde, zurück
  */
-Comment.prototype.target = function (callback) {
+Comment.prototype.getTarget = function (callback) {
 
   var self = this;
 
@@ -245,7 +254,7 @@ Comment.prototype.target = function (callback) {
 /**
  * @function Gibt den Autor zurück
  */
-Comment.prototype.author = function (callback) {
+Comment.prototype.getAuthor = function (callback) {
 
   var self = this;
 
@@ -277,8 +286,11 @@ Comment.prototype.addMetadata = function (apiVersion) {
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/comments/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.author = base + '/author';
-  this._node.target = base + '/target';
+
+  var links = {};
+  links.ref = base;
+  links.author = base + '/author';
+  links.target = base + '/target';
+  this.links = links;
 
 };

@@ -17,9 +17,8 @@ router.get('/targets', function(req, res, next) {
   Target.getAll(function(err, result) {
 
     if(err) return next(err);
-    result = result.map(function(t) {
+    result.forEach(function(t) {
       t.addMetadata(apiVersion);
-      return t._node;
     });
     res.json(result);
 
@@ -33,7 +32,7 @@ router.get('/targets/:uuid', function(req, res, next) {
   Target.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
     t.addMetadata(apiVersion);
-    res.json(t._node);
+    res.json(t);
   });
 
 });
@@ -48,9 +47,8 @@ router.get('/targets/:uuid/children', function(req, res, next) {
 
       var keys = Object.keys(children);
       keys.forEach(function(k) {
-        children[k] = children[k].map(function(i) {
+        children[k].forEach(function(i) {
           i.addMetadata(apiVersion);
-          return i._node;
         });
       });
       res.json(children);
@@ -67,7 +65,7 @@ router.get('/targets/:uuid/parent', function(req, res, next) {
     t.parents(function(err, p) {
       if(err) return next(err);
       p.addMetadata(apiVersion);
-      res.json(p._node);
+      res.json(p);
     });
   });
 
@@ -80,11 +78,42 @@ router.get('/targets/:uuid/infos', function(req, res, next) {
     if(err) return next(err);
     t.infos(function(err, infos) {
       if(err) return next(err);
-      infos = infos.map(function(i) {
+      infos.forEach(function(i) {
         i.addMetadata(apiVersion);
-        return i._node;
       });
       res.json(infos);
+    });
+  });
+
+});
+
+// Gibt alle Aufgaben für das Lernziel
+router.get('/targets/:uuid/tasks', function(req, res, next) {
+
+  Target.get(req.params.uuid, function(err, t) {
+    if(err) return next(err);
+    t.tasks(function(err, tasks) {
+      if(err) return next(err);
+      tasks.forEach(function(i) {
+        i.addMetadata(apiVersion);
+      });
+      res.json(tasks);
+    });
+  });
+
+});
+
+// Gibt alle weiteren direkt unterstellten Lernziele für das Lernziel
+router.get('/targets/:uuid/targets', function(req, res, next) {
+
+  Target.get(req.params.uuid, function(err, t) {
+    if(err) return next(err);
+    t.targets(1, function(err, targets) {
+      if(err) return next(err);
+      targets.forEach(function(i) {
+        i.addMetadata(apiVersion);
+      });
+      res.json(targets);
     });
   });
 

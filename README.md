@@ -10,7 +10,7 @@ Dies ist eine REST-like API für das Projekt Schwarmlernen an der Hochschule Cob
 - Neo4J (Plugins: [http://graphaware.com/products/](http://graphaware.com/products/))
 
 ## Fehler
-Üblicherweise sehen Fehler stets so aus:
+Üblicherweise sehen Fehler so aus:
 
 ```
 {
@@ -68,7 +68,7 @@ Ein Studiengang ist der oberste Einstiegspunkt in unserer Hierarchie.
 `GET /degrees/:uuid` - Liefert Studiengang mit ID `:uuid`
 
 `POST /degrees` - Erstellt einen neuen Studiengang
-- Erforderliche Parameter: `name` (String)
+- Erforderliche Parameter: `name` - String, min. 3 Zeichen
 - Falls Studiengang bereits besteht: **409**, "DegreeAlreadyExists"
 - Falls Parameter fehlen **400**, "ValidationError"
 
@@ -81,6 +81,8 @@ Ein Studiengang ist der oberste Einstiegspunkt in unserer Hierarchie.
 #### Relationen
 `GET /degrees/:uuid/targets` - Liefert Liste aller direkt benachbarten(!) Lernziele des Studiengangs `uuid`
 
+`GET /degrees/:uuid/users` - Liefert Liste aller User die auf diesen Studiengang zugreifen können
+
 ### <a name="lernziel">Lernziele (Targets)</a>
 Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an exakt einem(!) anderen Lernziel und teilt dessen Themenbereich auf.
 
@@ -90,7 +92,7 @@ Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an 
 `GET /targets/:uuid` - Liefert Lernziel `:uuid`
 
 `POST /targets` - Erstellt ein neues Lernziel
-- Erforderliche Parameter: `name` (String), `parent` (String (UUID des Parents))
+- Erforderliche Parameter: `name` (String, min. 3 Zeichen), `parent` (String (UUID des Parents))
 - Falls Parameter fehlen **400**, "ValidationError"
 - Falls Parent `parent` nicht existiert: **404**, "ParentNotFound"
 
@@ -100,9 +102,15 @@ Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an 
 `DELETE /targets/:uuid` - Löscht Lernziel `:uuid`
 
 #### Relationen
-`GET /targets/:uuid/children` - Liefert alle direkten Kindnodes (Lernziele bzw. Aufgaben) Lernziel `:uuid`
+`GET /targets/:uuid/children` - Liefert alle direkten Kindnodes (Lernziele, Aufgaben und Infos) des Lernziels `:uuid`
 
-`GET /targets/:uuid/parent` - Liefert Vaternode des Lernziel `:uuid`
+`GET /targets/:uuid/targets` - Liefert alle direkt unterstellten Lernziele des Lernziels `:uuid`
+
+`GET /targets/:uuid/tasks` - Liefert alle Aufgaben des Lernziels `:uuid`
+
+`GET /targets/:uuid/infos` - Liefert alle Infos des Lernziels `:uuid`
+
+`GET /targets/:uuid/parent` - Liefert Vaternode des Lernziels `:uuid`
 
 ### <a name="aufgabe">Aufgaben</a>
 #### Node Properties
@@ -161,7 +169,7 @@ Lösungen können weder verändert noch gelöscht werden.
 `GET /users/:uuid` - Liefert User mit UUID `uuid`
 
 `POST /users` - Neue Infos erstellen
-- Erforderliche Parameter: `username` (String) Names des neuen Nutzers
+- Erforderliche Parameter: `username` (String, min. 3 Zeichen) Name des neuen Nutzers, `password` (String, min. 5 Zeichen) Passwort des neuen Nutzers
 
 #### Relationen
 `GET /users/:uuid/infos` - Liefert Infos des Users mit der UUID `uuid`

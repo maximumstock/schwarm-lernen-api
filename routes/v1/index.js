@@ -12,6 +12,7 @@ var tasks = require('./tasks');
 var solutions = require('./solutions');
 var infos = require('./infos');
 var users = require('./users');
+var comments = require('./comments');
 
 var register = require('./auth/register');
 var login = require('./auth/login');
@@ -29,5 +30,6 @@ router.use('/', tasks);
 router.use('/', solutions);
 router.use('/', infos);
 router.use('/', users); // User nur durch Admins erstellbar (siehe auth/register.js)
+router.use('/', comments);
 
 module.exports = router;

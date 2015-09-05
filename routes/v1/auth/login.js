@@ -12,6 +12,11 @@ var User = require('../../../models/user');
 
 router.post('/login', function(req, res, next) {
 
+  req.checkBody('username', 'Username des Nutzers fehlt').notEmpty();
+  req.checkBody('password', 'Passwort des Nutzers fehlt').notEmpty();
+  var errors = req.validationErrors();
+  if(errors) return next(errors);
+
   // existiert der User?
   User.findByUsername(req.body.username, function(err, user) {
     if(err) return next(err);

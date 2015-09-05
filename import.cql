@@ -11,20 +11,20 @@ match (t:Target) with range(1,3) as RANGE, t foreach(r in RANGE | create (n:Targ
 match (t:Target)-[:PART_OF]->(t2:Target) with range(1,3) as RANGE, t foreach(r in RANGE | create (n:Target)-[:PART_OF]->(t));
 
 // User mit Zugang
-match (d:Degree {name: "Informatik"}) with range(1,20) as RANGE, d foreach(r in RANGE | create (u:User)-[:HAS_ACCESS]->(d));
+match (d:Degree {name: "Informatik"}) with range(1,20) as RANGE, d foreach(r in RANGE | create (u:User {username: toint(rand()*100)})-[:HAS_ACCESS]->(d));
 
 // Aufgaben
-match (u:User), (t:Target) where rand() < 0.05 create (u)-[:CREATED]->(ta:Task)-[:BELONGS_TO]->(t);
+match (u:User), (t:Target) where rand() < 0.05 create (u)-[:CREATED]->(ta:Task {description: "Task #" + toint(round(rand()*100))})-[:BELONGS_TO]->(t);
 
 // Infos
-match (u:User), (t:Target) where rand() < 0.1 create (u)-[:CREATED]->(i:Info)-[:BELONGS_TO]->(t);
+match (u:User), (t:Target) where rand() < 0.1 create (u)-[:CREATED]->(i:Info {description: "Info #" + toint(round(rand()*100))})-[:BELONGS_TO]->(t);
 
 // Lösungen
-match (u:User), (t:Task) where rand() < 0.05 create (u)-[:CREATED]->(s:Solution)-[:SOLVES]->(t);
+match (u:User), (t:Task) where rand() < 0.05 create (u)-[:CREATED]->(s:Solution {description: "Lösung #" + toint(round(rand()*100))})-[:SOLVES]->(t);
 
 // Kommentare und Ratings
 match (u:User), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
-  create unique (u)-[:RATES {rating: round((rand()%5+1))}]->(s);
+  create unique (u)-[:RATES {rating: toint(round(((rand()*100)%5+1)))}]->(s);
 match (u:User), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
   create (u)-[:CREATED]->(c:Comment {text: "Dies ist ein Kommentar"})-[:BELONGS_TO]->(s);
 
@@ -39,11 +39,13 @@ foreach (r in rels2 | delete r)
 foreach (s in solutions | delete s);
 
 // User ohne Zugang
-with range(1,5) as RANGE foreach(r in RANGE | create (u:User));
+with range(1,5) as RANGE foreach(r in RANGE | create (u:User {username: toint(rand()*100)}));
 
 
 // TEST STUFF
 // DELETE IN PRODUCTION
-// Testuser bene
 match (d:Degree)
-create (u:User {username: "admin", password: "admin"})-[:HAS_ACCESS]->(d);
+create
+  (u:User:Admin {username: "admin", password: "admin"})-[:HAS_ACCESS]->(d),
+  (u2:User {username: "bene", password: "bene"})-[:HAS_ACCESS]->(d),
+  (u3:User {username: "test", password: "test"})-[:HAS_ACCESS]->(d);

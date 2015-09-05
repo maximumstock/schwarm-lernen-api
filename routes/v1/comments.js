@@ -17,11 +17,10 @@ router.get('/comments', function(req, res, next) {
   Comment.getAll(function(err, result) {
 
     if(err) return next(err);
-    var ret = result.map(function(t) {
+    result.forEach(function(t) {
       t.addMetadata(apiVersion);
-      return t._node;
     });
-    res.json(ret);
+    res.json(result);
 
   });
 
@@ -34,7 +33,7 @@ router.get('/comments/:uuid', function(req, res, next) {
     if(err) return next(err);
 
     t.addMetadata(apiVersion);
-    res.json(t._node);
+    res.json(t);
   });
 
 });
@@ -44,10 +43,10 @@ router.get('/comments/:uuid/author', function(req, res, next) {
 
   Comment.get(req.params.uuid, function(err, s) {
     if(err) return next(err);
-    s.author(function(err, u) {
+    s.getAuthor(function(err, u) {
       if(err) return next(err);
       u.addMetadata(apiVersion);
-      res.json(u._node);
+      res.json(u);
     });
   });
 
@@ -58,10 +57,10 @@ router.get('/comments/:uuid/target', function(req, res, next) {
 
   Comment.get(req.params.uuid, function(err, s) {
     if(err) return next(err);
-    s.target(function(err, a) {
+    s.getTarget(function(err, a) {
       if(err) return next(err);
       a.addMetadata(apiVersion);
-      res.json(a._node);
+      res.json(a);
     });
   });
 
@@ -71,17 +70,15 @@ router.get('/comments/:uuid/target', function(req, res, next) {
 router.post('/comments', function(req, res, next) {
 
   req.checkBody('description', 'Inhalt des Komentars fehlt').notEmpty();
-  req.checkBody('author', 'UUID des Autors fehlt').notEmpty();
   req.checkBody('target', 'UUID des Ziels fehlt').notEmpty();
 
   var errors = req.validationErrors();
   if(errors) return next(errors);
 
-  var authorUUID = req.body.author;
   var targetUUID = req.body.target;
   var properties = req.body;
 
-  Comment.create(properties, targetUUID, authorUUID, function(err, s) {
+  Comment.create(properties, targetUUID, req.user.uuid, function(err, s) {
 
     if(err) return next(err);
     s.addMetadata(apiVersion);

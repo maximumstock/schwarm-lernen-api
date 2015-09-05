@@ -10,7 +10,7 @@
   * @param {object} _node Das Ergebnisobjekt der Datenbankabfrage, welches die Nutzdaten der Node enthält.
   */
  var Degree = module.exports = function Degree(_node) {
-   Node.call(this, _node);
+   Node.apply(this, arguments);
  };
 
 var neo4j = require('neo4j');
@@ -22,6 +22,7 @@ var moment = require('moment');
 
 var Node = require('./node');
 var Target = require('./target');
+var User = require('./user');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -48,7 +49,7 @@ Degree.VALIDATION_INFO = {
  */
 Object.defineProperty(Degree.prototype, 'name', {
   get: function () {
-    return this._node.properties.name;
+    return this.properties.name;
   }
 });
 
@@ -287,7 +288,7 @@ Degree.prototype.patch = function (properties, callback) {
  * @param {int} level maximale Beziehungstiefe in der Lernziele gesucht werden sollen
  * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
-Degree.prototype.targets = function (level, callback) {
+Degree.prototype.getTargets = function (level, callback) {
 
   var self = this;
 
@@ -317,6 +318,35 @@ Degree.prototype.targets = function (level, callback) {
 };
 
 /**
+ * @function Gibt alle User zurück die auf diesen Studiengang zugreifen können
+ */
+Degree.prototype.getUsers = function (callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (d:Degree {uuid: {uuid}})<-[:HAS_ACCESS]-(u:User)',
+    'RETURN u'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    var users = result.map(function(i) {
+      return new User(i.u);
+    });
+    callback(null, users);
+  });
+
+};
+
+/**
  * @function Fügt Metadaten hinzu
  * @param {string} apiVersion Ein vorangestellter String zur Vervollständigung der URL
  */
@@ -324,8 +354,12 @@ Degree.prototype.addMetadata = function (apiVersion) {
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/degrees/' + encodeURIComponent(this.uuid);
-  this._node.ref = base;
-  this._node.targets = base + '/targets';
+
+  var links = {};
+  links.ref = base;
+  links.targets = base + '/targets';
+  links.users = base + '/users';
+  this.links = links;
 
 };
 

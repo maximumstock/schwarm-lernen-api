@@ -17,11 +17,11 @@ router.get('/solutions', function(req, res, next) {
   Solution.getAll(function(err, result) {
 
     if(err) return next(err);
-    var ret = result.map(function(t) {
+    result.forEach(function(t) {
       t.addMetadata(apiVersion);
-      return t._node;
+      t.author.addMetadata(apiVersion);
     });
-    res.json(ret);
+    res.json(result);
 
   });
 
@@ -32,9 +32,9 @@ router.get('/solutions/:uuid', function(req, res, next) {
 
   Solution.get(req.params.uuid, function(err, t) {
     if(err) return next(err);
-
     t.addMetadata(apiVersion);
-    res.json(t._node);
+    t.author.addMetadata(apiVersion);
+    res.json(t);
   });
 
 });
@@ -89,17 +89,15 @@ router.get('/solutions/:uuid/comments', function(req, res, next) {
 router.post('/solutions', function(req, res, next) {
 
   req.checkBody('description', 'Inhalt der Lösung fehlt').notEmpty();
-  req.checkBody('author', 'UUID des Autors fehlt').notEmpty();
   req.checkBody('task', 'UUID der Aufgabe fehlt').notEmpty();
 
   var errors = req.validationErrors();
   if(errors) return next(errors);
 
-  var authorUUID = req.body.author;
   var taskUUID = req.body.task;
   var properties = req.body;
 
-  Solution.create(properties, taskUUID, authorUUID, function(err, s) {
+  Solution.create(properties, taskUUID, req.user.uuid, function(err, s) {
 
     if(err) return next(err);
     res.status(201).json(s);

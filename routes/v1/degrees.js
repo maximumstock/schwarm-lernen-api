@@ -18,9 +18,8 @@ router.get('/degrees', function(req, res, next) {
 
   Degree.getAll(function(err, result) {
     if (err) return next(err);
-    result = result.map(function(val) {
-      val.addMetadata(apiVersion);
-      return val._node;
+    result.forEach(function(e) {
+      e.addMetadata(apiVersion);
     });
     res.json(result);
   });
@@ -33,7 +32,7 @@ router.get('/degrees/:uuid', function(req, res, next) {
   Degree.get(req.params.uuid, function(err, s) {
     if (err) return next(err);
     s.addMetadata(apiVersion);
-    res.json(s._node);
+    res.json(s);
   });
 
 });
@@ -43,15 +42,30 @@ router.get('/degrees/:uuid/targets', function(req, res, next) {
 
   Degree.get(req.params.uuid, function(err, d) {
     if(err) return next(err);
-    d.targets(1, function(err, targets) {
+    d.getTargets(1, function(err, targets) {
       if(err) return next(err);
       // Referenzen an die Targets hängen
-      targets = targets.map(function(t) {
+      targets.forEach(function(t) {
         t.addMetadata(apiVersion);
-        return t._node;
       });
-      d._node.targets = targets;
-      res.json(d._node.targets);
+      d.targets = targets;
+      res.json(d.targets);
+    });
+  });
+
+});
+
+// Gibt alle Nutzer die Zugriff auf diesen Studiengang haben zurück
+router.get('/degrees/:uuid/users', function(req, res, next) {
+
+  Degree.get(req.params.uuid, function(err, d) {
+    if(err) return next(err);
+    d.getUsers(function(err, users) {
+      if(err) return next(err);
+      users.forEach(function(i) {
+        i.addMetadata(apiVersion);
+      });
+      res.json(users);
     });
   });
 
@@ -60,10 +74,14 @@ router.get('/degrees/:uuid/targets', function(req, res, next) {
 // Studiengang erstellen
 router.post('/degrees', auth.adminOnly, function(req, res, next) {
 
+  req.checkBody('name', 'Name des neuen Studiengangs fehlt').notEmpty();
+  var errors = req.validationErrors();
+  if(errors) return next(errors);
+
   Degree.create(req.body, function(err, result) {
     if (err) return next(err);
     result.addMetadata(apiVersion);
-    res.status(201).json(result._node);
+    res.status(201).json(result);
   });
 
 });
@@ -91,7 +109,7 @@ router.put('/degrees/:uuid', auth.adminOnly, function(req, res, next) {
     d.patch(req.body, function(err, nd) {
       if (err) return next(err);
       nd.addMetadata(apiVersion);
-      res.json(nd._node);
+      res.json(nd);
     });
   });
 
