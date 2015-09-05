@@ -14,7 +14,7 @@ var auth = require('./auth');
 var apiVersion = config.HOST_URL + '/api/v1';
 
 // User registrieren
-router.post('/register', auth.adminOnly, function(req, res, next) {
+router.post('/register', function(req, res, next) {
 
   req.checkBody('username', 'Username fehlt').notEmpty();
   req.checkBody('password', 'Passwort fehlt').notEmpty();
