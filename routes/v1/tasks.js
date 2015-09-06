@@ -98,7 +98,6 @@ router.post('/tasks', function(req, res, next) {
 
   var errors = req.validationErrors();
   if(errors) {
-    errors.status = 400;
     return next(errors);
   }
 

@@ -40,6 +40,16 @@ app.use(function(req, res, next) {
 
 // Fehlerbehandlung
 
+// Fehlerbehandlung von Requests mit fehlenden Informationen (express-validator gibt Array zurück)
+app.use(function(err, req, res, next) {
+  if(Array.isArray(err)) {
+    res.status(400);
+    res.json(err);
+  } else {
+    next(err);
+  }
+});
+
 // Fehlerhandler für Testumgebung
 // hierbei wird der Stacktrace des Fehlers ausgegeben
 if (app.get('env') === 'development') {

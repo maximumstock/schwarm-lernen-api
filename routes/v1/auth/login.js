@@ -16,7 +16,6 @@ router.post('/login', function(req, res, next) {
   req.checkBody('password', 'Passwort des Nutzers fehlt').notEmpty();
   var errors = req.validationErrors();
   if(errors) {
-    errors.status = 400;
     return next(errors);
   }
 
