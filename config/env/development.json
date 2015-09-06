@@ -4,6 +4,6 @@
   "NEO4J_URL"   : "http://neo4j:speedy66@localhost:7474/graphaware",
   "HOST_URL"    : "",
   "API_SECRET"  : "fightmeirlf4gg0t",
-  "DISABLE_AUTH": true
+  "DISABLE_AUTH": false
 
 }

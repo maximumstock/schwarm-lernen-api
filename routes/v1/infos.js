@@ -77,7 +77,7 @@ router.post('/infos', function(req, res, next) {
 
   var targetUUID = req.body.target;
   var properties = req.body;
-
+  
   Info.create(properties, targetUUID, req.user.uuid, function(err, s) {
 
     if(err) return next(err);

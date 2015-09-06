@@ -34,11 +34,6 @@ Info.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Info-Nodes für Info#create
 Info.VALIDATION_INFO = {
-  author: {
-    required: true,
-    minLength: 36,
-    message: 'Muss einen Autor haben.'
-  },
   description: {
     required: true,
     message: 'Muss eine Beschreibung haben'
