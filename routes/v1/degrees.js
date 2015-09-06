@@ -76,7 +76,10 @@ router.post('/degrees', auth.adminOnly, function(req, res, next) {
 
   req.checkBody('name', 'Name des neuen Studiengangs fehlt').notEmpty();
   var errors = req.validationErrors();
-  if(errors) return next(errors);
+  if(errors) {
+    errors.status = 400;
+    return next(errors);
+  }
 
   Degree.create(req.body, function(err, result) {
     if (err) return next(err);

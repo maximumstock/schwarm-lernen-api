@@ -92,7 +92,10 @@ router.post('/solutions', function(req, res, next) {
   req.checkBody('task', 'UUID der Aufgabe fehlt').notEmpty();
 
   var errors = req.validationErrors();
-  if(errors) return next(errors);
+  if(errors) {
+    errors.status = 400;
+    return next(errors);
+  }
 
   var taskUUID = req.body.task;
   var properties = req.body;

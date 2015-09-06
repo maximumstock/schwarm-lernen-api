@@ -73,11 +73,14 @@ router.post('/infos', function(req, res, next) {
   req.checkBody('target', 'UUID des Lernziels fehlt').notEmpty();
 
   var errors = req.validationErrors();
-  if(errors) return next(errors);
+  if(errors) {
+    errors.status = 400;
+    return next(errors);
+  }
 
   var targetUUID = req.body.target;
   var properties = req.body;
-  
+
   Info.create(properties, targetUUID, req.user.uuid, function(err, s) {
 
     if(err) return next(err);

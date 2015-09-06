@@ -97,7 +97,10 @@ router.post('/tasks', function(req, res, next) {
   req.checkBody('parent', 'UUID des Parents fehlt').notEmpty();
 
   var errors = req.validationErrors();
-  if(errors) return next(errors);
+  if(errors) {
+    errors.status = 400;
+    return next(errors);
+  }
 
   var parentUUID = req.body.parent;
   var properties = req.body;

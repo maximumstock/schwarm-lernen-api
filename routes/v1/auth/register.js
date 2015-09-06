@@ -20,7 +20,10 @@ router.post('/register', function(req, res, next) {
   req.checkBody('password', 'Passwort fehlt').notEmpty();
 
   var errors = req.validationErrors();
-  if(errors) return next(errors);
+  if(errors) {
+    errors.status = 400;
+    return next(errors);
+  }
 
   var properties = req.body;
 

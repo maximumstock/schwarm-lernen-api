@@ -15,7 +15,10 @@ router.post('/login', function(req, res, next) {
   req.checkBody('username', 'Username des Nutzers fehlt').notEmpty();
   req.checkBody('password', 'Passwort des Nutzers fehlt').notEmpty();
   var errors = req.validationErrors();
-  if(errors) return next(errors);
+  if(errors) {
+    errors.status = 400;
+    return next(errors);
+  }
 
   // existiert der User?
   User.findByUsername(req.body.username, function(err, user) {
