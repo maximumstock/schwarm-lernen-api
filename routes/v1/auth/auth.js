@@ -30,7 +30,7 @@ exports.auth = function(req, res, next) {
       if(err) {
         return next(err);
       } else {
-        req.user = new User(decoded._node);
+        req.user = new User(decoded);
         next();
       }
     });
