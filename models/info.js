@@ -176,7 +176,7 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
 
     // falls es kein Ergebnis gibt wurde die neue Info nicht erstellt da es keinen passenden Autor oder Target gibt
     if (result.length === 0) {
-      err = new Error('Der Benutzer `' + userUUID + '` oder das Target `' + targetUUID + '` existieren nicht');
+      err = new Error('Das Target `' + targetUUID + '` existiert nicht');
       err.status = 404;
       err.name = 'TargetOrUserNotFound';
 

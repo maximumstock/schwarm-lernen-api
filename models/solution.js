@@ -174,7 +174,7 @@ Solution.create = function (properties, taskUUID, userUUID, callback) {
     if (err) return callback(err);
     // falls es kein Ergebnis gibt wurde die neue Lösung nicht erstellt da es keinen passenden Autor oder Aufgabe gibt
     if (result.length === 0) {
-      err = new Error('Der Benutzer `' + userUUID + '` oder die Aufgabe `' + taskUUID + '` existieren nicht');
+      err = new Error('D Aufgabe `' + taskUUID + '` existiert nicht');
       err.status = 404;
       err.name = 'TaskOrUserNotFound';
       return callback(err);

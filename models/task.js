@@ -173,7 +173,7 @@ Task.create = function(properties, parentUUID, authorUUID, callback) {
 
     // falls es kein Ergebnis gibt wurde die neue Aufgabe nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
     if(result.length === 0) {
-      err = new Error('Es gibt kein gültiges Lernziel als Parent mit der UUID `' + parentUUID + '`');
+      err = new Error('Das Lernziel als Parent mit der UUID `' + parentUUID + '` existiert nicht');
       err.status = 404;
       err.name = 'ParentNotFound';
 

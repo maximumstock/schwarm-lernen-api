@@ -43,7 +43,7 @@ Alle Endpunkte können nur von authentifizierten Nutzern angesprochen werden. Hi
 
 Admins können alle Endpunkte ansprechen und sind zu allem berechtigt.
 
-Gewöhnliche User hingegen können keine `Studiengänge`, `Lernziele` oder andere `User` erstellen, bearbeiten oder löschen.
+Gewöhnliche User hingegen können keine `Studiengänge` oder `Lernziele` erstellen, bearbeiten oder löschen.
 
 Beim Anmelden werden `Username` und `Passwort` gegen ein JSON Webtoken ausgetauscht, welches den User authentifiziert. Dieses Token muss bei jedem Request (als URL-Parameter, im Request-Body oder im HTTP Header unter "X-Access-Token") mitgeschickt werden.
 
@@ -67,15 +67,15 @@ Ein Studiengang ist der oberste Einstiegspunkt in unserer Hierarchie.
 
 `GET /degrees/:uuid` - Liefert Studiengang mit ID `:uuid`
 
-`POST /degrees` - Erstellt einen neuen Studiengang
+`POST /degrees` - `ADMINONLY` - Erstellt einen neuen Studiengang
 - Erforderliche Parameter: `name` - String, min. 3 Zeichen
 - Falls Studiengang bereits besteht: **409**, "DegreeAlreadyExists"
 - Falls Parameter fehlen **400**, "ValidationError"
 
-`PUT /degrees/:uuid` - Aktualisiert den Studiengang `:uuid`
+`PUT /degrees/:uuid` - `ADMINONLY` - Aktualisiert den Studiengang `:uuid`
 - Falls der neue Name von `:uuid` bereits existiert: **409**, "DegreeAlreadyExists"
 
-`DELETE /degrees/:uuid` - Löscht den Studiengang `:uuid`
+`DELETE /degrees/:uuid` - `ADMINONLY` - Löscht den Studiengang `:uuid`
 - Falls am Studiengang `:uuid` Beziehungen (z.B. zu Lernzielen) hängen: **409**, "RemainingRelationships"
 
 #### Relationen
@@ -91,15 +91,15 @@ Ein Lernziel hängt stets an exakt einem(!) [Studiengang](#studiengang) oder an 
 
 `GET /targets/:uuid` - Liefert Lernziel `:uuid`
 
-`POST /targets` - Erstellt ein neues Lernziel
+`POST /targets` - `ADMINONLY` - Erstellt ein neues Lernziel
 - Erforderliche Parameter: `name` (String, min. 3 Zeichen), `parent` (String (UUID des Parents))
 - Falls Parameter fehlen **400**, "ValidationError"
 - Falls Parent `parent` nicht existiert: **404**, "ParentNotFound"
 
-`PUT /targets/:uuid` - Aktualisiert Lernziel `:uuid`
+`PUT /targets/:uuid` - `ADMINONLY` - Aktualisiert Lernziel `:uuid`
 - Falls `parent` gesetzt ist wird versucht die Parentnode entsprechend zu ändern
 
-`DELETE /targets/:uuid` - Löscht Lernziel `:uuid`
+`DELETE /targets/:uuid` - `ADMINONLY` - Löscht Lernziel `:uuid`
 
 #### Relationen
 `GET /targets/:uuid/children` - Liefert alle direkten Kindnodes (Lernziele, Aufgaben und Infos) des Lernziels `:uuid`
@@ -133,11 +133,9 @@ Aufgaben können weder verändert noch gelöscht werden.
 `GET /infos/:uuid` - Liefert Info mit UUID `uuid`
 
 `POST /infos` - Neue Infos erstellen
-- Erforderliche Parameter: `description` (String) Inhalt, `target` (String) UUID des Lernziels der Info, `author` (String) UUID des Autors
+- Erforderliche Parameter: `description` (String) Inhalt, `target` (String) UUID des Lernziels der Info
 
 #### Relationen
-`GET /infos/:uuid/author` - Liefert User der die Info mit der UUID `uuid` erstellt hat
-
 `GET /infos/:uuid/target` - Liefert Lernziel dem die Info mit der UUID `uuid` angehört
 
 `GET /infos/:uuid/comments` - Liefert Kommentare für die Info mit der UUID `uuid`
@@ -151,11 +149,9 @@ Infos können weder verändert noch gelöscht werden.
 `GET /solutions/:uuid` - Liefert Lösung mit UUID `uuid`
 
 `POST /infos` - Neue Infos erstellen
-- Erforderliche Parameter: `description` (String) Inhalt, `task` (String) UUID der Aufgabe der Lösung, `author` (String) UUID des Autors
+- Erforderliche Parameter: `description` (String) Inhalt, `task` (String) UUID der Aufgabe der Lösung
 
 #### Relationen
-`GET /solutions/:uuid/author` - Liefert User der die Lösung mit der UUID `uuid` erstellt hat
-
 `GET /solutions/:uuid/task` - Liefert Aufgabe dem die Lösung mit der UUID `uuid` angehört
 
 `GET /solutions/:uuid/comments` - Liefert Kommentare für die Lösung mit der UUID `uuid`
@@ -168,9 +164,6 @@ Lösungen können weder verändert noch gelöscht werden.
 
 `GET /users/:uuid` - Liefert User mit UUID `uuid`
 
-`POST /users` - Neue Infos erstellen
-- Erforderliche Parameter: `username` (String, min. 3 Zeichen) Name des neuen Nutzers, `password` (String, min. 5 Zeichen) Passwort des neuen Nutzers
-
 #### Relationen
 `GET /users/:uuid/infos` - Liefert Infos des Users mit der UUID `uuid`
 
@@ -178,4 +171,4 @@ Lösungen können weder verändert noch gelöscht werden.
 
 `GET /users/:uuid/tasks/solved` - Liefert bearbeitete Aufgaben des Users mit der UUID `uuid`
 
-`GET /users/:uuid/solutions` - Liefert Lösungen des Usersmit der UUID `uuid`
+`GET /users/:uuid/solutions` - Liefert Lösungen des Users mit der UUID `uuid`
