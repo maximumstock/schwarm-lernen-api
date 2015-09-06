@@ -53,6 +53,20 @@ router.get('/info/:uuid/target', function(req, res, next) {
 
 });
 
+// Gibt den Autor für eine bestimmte Info zurück
+router.get('/infos/:uuid/author', function(req, res, next) {
+
+  Info.get(req.params.uuid, function(err, t) {
+    if(err) return next(err);
+    t.getAuthor(function(err, u) {
+      if(err) return next(err);
+      u.addMetadata(apiVersion);
+      res.json(u);
+    });
+  });
+
+});
+
 // Gibt alle Kommentare für eine bestimmte Info zurück
 router.get('/infos/:uuid/comments', function(req, res, next) {
 
