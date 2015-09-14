@@ -532,6 +532,8 @@ User.prototype.hasCreated = function(nodeUUID, callback) {
  */
 User.prototype.rate = function(nodeUUID, rating, callback) {
 
+  var self = this;
+
   if(rating < 0 || rating > 5) {
     var err = new Error('Die Bewertung muss zwischen 0 und 5 liegen');
     err.status = 409;
@@ -549,7 +551,6 @@ User.prototype.rate = function(nodeUUID, rating, callback) {
       return callback(err);
     } else {
       // User darf bewerten
-      var self = this;
 
       var query = [
         'MERGE (u:User {uuid: {userUUID}})-[r:RATES]->(n {uuid: {nodeUUID}})',
