@@ -20,9 +20,11 @@ var errors = require('../lib/errors/errors');
 var moment = require('moment');
 
 var Node = require('./node');
+var Degree = require('./degree');
 var Solution = require('./solution');
 var Comment = require('./comment');
 var User = require('./user');
+var Target = require('./target');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -72,9 +74,8 @@ Object.defineProperty(Task.prototype, 'author', {
 Task.get = function(uuid, callback) {
 
   var query = [
-    'MATCH (creator:User)-[:CREATED]->(a:Task {uuid: {uuid}})',
-    'OPTIONAL MATCH (a)<-[r:RATES]-(u:User)',
-    'RETURN a, creator, avg(r.rating) as rating, length(collect(r)) as votes'
+    'MATCH (a:Task {uuid: {uuid}})',
+    'RETURN a'
   ].join('\n');
 
   var params = {
@@ -93,9 +94,6 @@ Task.get = function(uuid, callback) {
       return callback(err);
     }
     // erstelle neue Aufgabe-Instanz und gib diese zurück
-    result[0].a.properties.rating = result[0].rating;
-    result[0].a.properties.votes = result[0].votes;
-    result[0].a.properties.author = new User(result[0].creator);
     var a = new Task(result[0].a);
     callback(null, a);
   });
@@ -109,9 +107,8 @@ Task.get = function(uuid, callback) {
 Task.getAll = function(callback) {
 
   var query = [
-    'MATCH (creator:User)-[:CREATED]->(a:Task)',
-    'OPTIONAL MATCH (a)<-[r:RATES]-(u:User)',
-    'RETURN a, creator, avg(r.rating) as rating, length(collect(r)) as votes'
+    'MATCH (a:Task)',
+    'RETURN a'
   ].join('\n');
 
   db.cypher({
@@ -121,9 +118,6 @@ Task.getAll = function(callback) {
 
     // Erstelle ein Array von Aufgaben aus dem Ergebnisdokument
     var aufgaben = result.map(function(e) {
-      e.a.properties.rating = e.rating;
-      e.a.properties.votes = e.votes;
-      e.a.properties.author = new User(e.creator);
       return new Task(e.a);
     });
 
@@ -150,6 +144,8 @@ Task.create = function(properties, parentUUID, authorUUID, callback) {
   }
 
   properties.createdAt = parseInt(moment().format('X'));
+  properties.author = authorUUID;
+  properties.target = parentUUID;
 
   var query = [
     'MATCH (dt:Target {uuid: {parent}}), (u:User {uuid: {author}})',
@@ -210,7 +206,7 @@ Task.prototype.del = function(callback) {
 
   var query = [
     'MATCH (a:Task {uuid: {uuid}})-[r:BELONGS_TO]->(o)', // Aufgabe hängt immer an einem Target
-    'DELETE t, r'
+    'DELETE a, r'
   ].join('\n');
 
   var params = {
@@ -291,33 +287,6 @@ Task.prototype.patch = function(properties, callback) {
 
 };
 
-/**
- * @function Gibt den Autor zurück
- */
-Task.prototype.getAuthor = function (callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (t:Task {uuid: {uuid}})<-[:CREATED]-(u:User)',
-    'RETURN u'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-    var u = new User(result[0].u);
-    callback(null, u);
-  });
-
-};
-
 
 /**
  * @function Löscht die alte Parent-Beziehung zwischen dieser Aufgaben und dessen Lernziel und
@@ -354,6 +323,39 @@ Task.prototype.changeParent = function(newParent, callback) {
 };
 
 /**
+ * @function Gibt Vater-Node der Aufgabe, also das zugehörige Lernziel zurück
+ */
+Task.prototype.getParent = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (n {uuid: {selfUUID}})-[:BELONGS_TO]->(t:Target)',
+    'RETURN t'
+  ].join('\n');
+
+  var params = {
+    selfUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) {
+      err = new Error('Keine Aufgabe `'+self.uuid+'` oder kein zugehöriges Lernziel gefunden');
+      err.status = 404;
+      err.name = 'ShitHappens';
+      return callback(err);
+    }
+
+    callback(null, new Target(result[0].t));
+  });
+
+};
+
+/**
  * @function Gibt alle zugehörigen Lösungen zu dieser Aufgabe zurück
  */
 Task.prototype.getSolutions = function(callback) {
@@ -385,15 +387,15 @@ Task.prototype.getSolutions = function(callback) {
 };
 
 /**
- * @function Gibt alle zugehörigen Kommentare zu dieser Aufgabe zurück
+ * @function Middleware um den Studiengang, zu dem diese Aufgabe gehört, im Request zu speichern
  */
-Task.prototype.getComments = function(callback) {
+Task.prototype.getParentDegree = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (a:Task {uuid: {uuid}})<-[r:BELONGS_TO]-(c:Comment)',
-    'RETURN c'
+    'MATCH (t:Task {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
+    'RETURN d'
   ].join('\n');
 
   var params = {
@@ -404,16 +406,11 @@ Task.prototype.getComments = function(callback) {
     query: query,
     params: params
   }, function(err, result) {
-
-    if(err) return callback(err);
-    var comments = result.map(function(i) {
-      return new Comment(i.c);
-    });
-    callback(null, comments);
-
+    callback(err, new Degree(result[0].d));
   });
 
 };
+
 
 /**
  * @function Fügt Metadaten hinzu
@@ -425,10 +422,12 @@ Task.prototype.addMetadata = function(apiVersion) {
   var base = apiVersion + '/tasks/' + encodeURIComponent(this.uuid);
   var links = {};
   links.ref = base;
-  links.author = base + '/author';
+  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  links.target = apiVersion + '/target/' + encodeURIComponent(this.properties.target);
   links.solutions = base + '/solutions';
+  links.solution = base + '/solution';
   links.comments = base + '/comments';
-  links.parent = base + '/parent';
+  links.rating = base + '/rating';
 
   this.links = links;
 

@@ -40,6 +40,8 @@ router.post('/login', function(req, res, next) {
 
       res.json({
         success: true,
+        admin: user.isAdmin(),
+        user: user,
         token: token
       });
 

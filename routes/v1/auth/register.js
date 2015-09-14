@@ -13,27 +13,27 @@ var auth = require('./auth');
 
 var apiVersion = config.HOST_URL + '/api/v1';
 
-// User registrieren
-router.post('/register', function(req, res, next) {
-
-  req.checkBody('username', 'Username fehlt').notEmpty();
-  req.checkBody('password', 'Passwort fehlt').notEmpty();
-
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
-
-  var properties = req.body;
-
-  User.create(properties, function(err, s) {
-
-    if(err) return next(err);
-    s.addMetadata(apiVersion);
-    res.status(201).json(s._node);
-
-  });
-
-});
+// // User registrieren
+// router.post('/register', function(req, res, next) {
+//
+//   req.checkBody('username', 'Username fehlt').notEmpty();
+//   req.checkBody('password', 'Passwort fehlt').notEmpty();
+//
+//   var errors = req.validationErrors();
+//   if(errors) {
+//     return next(errors);
+//   }
+//
+//   var properties = req.body;
+//
+//   User.create(properties, function(err, s) {
+//
+//     if(err) return next(err);
+//     s.addMetadata(apiVersion);
+//     res.status(201).json(s._node);
+//
+//   });
+//
+// });
 
 module.exports = router;

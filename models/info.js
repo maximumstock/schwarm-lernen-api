@@ -23,6 +23,7 @@ var moment = require('moment');
 var Node = require('./node');
 var Target = require('./target');
 var User = require('./user');
+var Degree = require('./degree');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -74,9 +75,8 @@ Object.defineProperty(Info.prototype, 'author', {
 Info.get = function (uuid, callback) {
 
   var query = [
-    'MATCH (creator:User)-[CREATED]->(i:Info {uuid: {uuid}})',
-    'OPTIONAL MATCH (i)<-[r:RATES]-(u:User)',
-    'RETURN i, creator, avg(r.rating) as rating, length(collect(r)) as votes'
+    'MATCH (i:Info {uuid: {uuid}})',
+    'RETURN i'
   ].join('\n');
 
   var params = {
@@ -95,9 +95,6 @@ Info.get = function (uuid, callback) {
       return callback(err);
     }
     // erstelle neue Info-Instanz und gib diese zurück
-    result[0].i.properties.rating = result[0].rating;
-    result[0].i.properties.votes = result[0].votes;
-    result[0].i.properties.author = new User(result[0].creator);
     var i = new Info(result[0].i);
     callback(null, i);
   });
@@ -111,9 +108,8 @@ Info.get = function (uuid, callback) {
 Info.getAll = function (callback) {
 
   var query = [
-    'MATCH (creator:User)-[CREATED]->(i:Info)',
-    'OPTIONAL MATCH (i)<-[r:RATES]-(u:User)',
-    'RETURN i, creator, avg(r.rating) as rating, length(collect(r)) as votes'
+    'MATCH (i:Info)',
+    'RETURN i'
   ].join('\n');
 
   db.cypher({
@@ -153,6 +149,8 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
   }
 
   properties.createdAt = parseInt(moment().format('X'));
+  properties.author = userUUID;
+  properties.target = targetUUID;
 
   var query = [
     'MATCH (a:Target {uuid: {target}}), (u:User {uuid: {author}})',
@@ -184,10 +182,10 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
     }
 
     // hole gerade erstellte Info aus der Datenbank
-    dbhelper.getNodeById(result[0].i._id, function (err, result) {
+    dbhelper.getNodeByID(result[0].i._id, function (err, node) {
       if (err) return callback(err);
       // erstelle neue Infosinstanz und gib diese zurück
-      var i = new Info(result[0].x);
+      var i = new Info(node);
       callback(null, i);
     });
 
@@ -200,7 +198,7 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
 /**
  * @function Gibt zugehöriges Target zu dieser Info zurück
  */
-Info.prototype.getTarget = function (callback) {
+Info.prototype.getParent = function (callback) {
 
   var self = this;
 
@@ -227,15 +225,15 @@ Info.prototype.getTarget = function (callback) {
 };
 
 /**
- * @function Gibt den Autor zurück
+ * @function Middleware um den Studiengang, zu dem diese Info gehört, im Request zu speichern
  */
-Info.prototype.getAuthor = function (callback) {
+Info.prototype.getParentDegree = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (i:Info {uuid: {uuid}})<-[:CREATED]-(u:User)',
-    'RETURN u'
+    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
+    'RETURN d'
   ].join('\n');
 
   var params = {
@@ -245,37 +243,8 @@ Info.prototype.getAuthor = function (callback) {
   db.cypher({
     query: query,
     params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-    var u = new User(result[0].u);
-    callback(null, u);
-  });
-
-};
-
-/**
- * @function Gibt alle Kommentare zu dieser Info zurück
- */
-Info.prototype.getComments = function (callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (i:Info {uuid: {uuid}})<-[r:COMMENTS]-(u:User)',
-    'RETURN r, u'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-
-    callback(null, result);
+  }, function(err, result) {
+    callback(err, new Degree(result[0].d));
   });
 
 };
@@ -291,9 +260,10 @@ Info.prototype.addMetadata = function (apiVersion) {
 
   var links = {};
   links.ref = base;
-  links.author = base + '/author';
-  links.ratings = base + '/ratings';
-  links.target = base + '/target';
+  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  links.target = apiVersion + '/targets/' + encodeURIComponent(this.properties.target);
+  links.rating = base + '/rating';
+  links.comments = base + '/comments';
 
   this.links = links;
 

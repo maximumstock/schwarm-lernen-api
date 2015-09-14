@@ -11,7 +11,6 @@
  */
 var User = module.exports = function User(_node) {
   Node.apply(this, arguments);
-  this.isAdmin = this.isAdmin();
 };
 
 var neo4j = require('neo4j');
@@ -21,6 +20,8 @@ var errors = require('../lib/errors/errors');
 var dbhelper = require('../lib/db');
 var moment = require('moment');
 var pwgen = require('password-generator');
+var _ = require('lodash');
+var async = require('async');
 
 var Node = require('./node');
 var Task = require('./task');
@@ -40,12 +41,12 @@ User.prototype = Object.create(Node.prototype);
 User.VALIDATION_INFO = {
   username: {
     required: true,
-    minLength: 3,
+    minLength: config.DEFAULT_USERNAME_LENGTH,
     message: 'Muss einen Username haben.'
   },
   password: {
     required: true,
-    minLength: 5,
+    minLength: config.DEFAULT_PASSWORD_LENGTH,
     message: 'Muss ein Passwort haben'
   }
 };
@@ -87,7 +88,6 @@ Object.defineProperty(User.prototype, 'password', {
 /**
  * @function get Statische Gettermethode für User
  * @param {string} uuid UUID des gesuchten Users
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 User.get = function (uuid, callback) {
 
@@ -153,7 +153,6 @@ User.findByUsername = function(username, callback) {
 
 /**
  * @function get Statische Gettermethode für ALLE User
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 User.getAll = function (callback) {
 
@@ -203,10 +202,54 @@ User.isValidUsername = function(username, callback) {
 };
 
 /**
+ * @function Generiert {number} username-password Kombinationen
+ * @param {int} number Anzahl an zu generierenden Kombinationen
+ */
+User.generate = function(number, callback) {
+
+  var accounts = [];
+  for(var i = 0; i < number; i++) {
+    accounts.push({
+      username: pwgen(config.DEFAULT_USERNAME_LENGTH),
+      password: pwgen(config.DEFAULT_PASSWORD_LENGTH)
+    });
+  }
+
+  // überprüfe ob usernamen unique sind
+  _.uniq(accounts, 'username');
+  if(accounts.length !== number) {
+    // min. 1 username wurde doppelt generiert
+    return User.generate(number, callback); // einfach nochmal probieren
+  }
+
+  // überprüfen ob Usernamen valide sind (aka noch nicht verwendet sind)
+  // alle Usernames mit User.isValidUsername überprüfen
+  var todo = accounts.map(function(i) {
+    return function(cb) {
+      User.isValidUsername(i.username, cb);
+    };
+  });
+
+  async.parallel(todo, function(err, result) {
+    if(err) return callback(err);
+    // falls alle Usernames valide sind, ist result in Array von {number} true-Werten
+    // falls ein false dabei ist -> nochmal probieren
+    var b = true;
+    result.forEach(function(i) {
+      b = b & i;
+    });
+    if(b === false) {
+      return User.generate(number, callback);
+    }
+    callback(null, accounts);
+  });
+
+};
+
+/**
  * @function
  * @name create Erstellt einen neuen User und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
- * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
  */
 User.create = function (properties, callback) {
 
@@ -248,10 +291,10 @@ User.create = function (properties, callback) {
 
         if (err) return callback(err);
         // hole gerade erstellten User aus der Datenbank
-        dbhelper.getNodeById(result[0].u._id, function (err, node) {
+        dbhelper.getNodeByID(result[0].u._id, function (err, node) {
           if (err) return callback(err);
           // erstelle neue Userinstanz und gib diese zurück
-          var u = new User(node[0].x);
+          var u = new User(node);
           callback(null, u);
         });
       });
@@ -276,7 +319,7 @@ User.prototype.isAdmin = function () {
 /**
  * @function Gibt alle Kommentare dieses Users zurück
  */
-User.prototype.comments = function (callback) {
+User.prototype.getComments = function (callback) {
 
   var self = this;
 
@@ -303,7 +346,7 @@ User.prototype.comments = function (callback) {
 /**
  * @function Gibt alle Infos zurück, die dieser User erstellt hat
  */
-User.prototype.infos = function (callback) {
+User.prototype.getInfos = function (callback) {
 
   var self = this;
 
@@ -332,7 +375,7 @@ User.prototype.infos = function (callback) {
 /**
  * @function Gibt alle Aufgaben zurück, die dieser User erstellt hat
  */
-User.prototype.ownTasks = function (callback) {
+User.prototype.getOwnTasks = function (callback) {
 
   var self = this;
 
@@ -361,7 +404,7 @@ User.prototype.ownTasks = function (callback) {
 /**
  * @function Gibt alle Aufgaben zurück, die dieser User bearbeitet hat (egal ob Lösung bewertet oder nicht)
  */
-User.prototype.solvedTasks = function (callback) {
+User.prototype.getSolvedTasks = function (callback) {
 
   var self = this;
 
@@ -387,6 +430,149 @@ User.prototype.solvedTasks = function (callback) {
 
 };
 
+/**
+ * @function Gibt alle Aufgaben zurück, die dieser User im Lernziel `targetUUID` bearbeitet hat
+ * @param {string} targetUUID UUID des Lernziels auf die die Suche beschränkt werden soll
+ */
+User.prototype.getSolvedTasksByTarget = function(targetUUID, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {uuid}})-[:CREATED]->(s:Solution)-[:SOLVES]->(t:Task)<-[:BELONGS_TO]-(target:Target {uuid: {targetUUID}})',
+    'RETURN t'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid,
+    targetUUID: targetUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    result = result.map(function(i) {
+      return new Task(i.t);
+    });
+    callback(null, result);
+  });
+
+};
+
+/**
+ * @function Liefert eine Lösung des Users aufgrund einer Aufgaben-UUID
+ * @param {string} taskUUID UUID der Aufgabe
+ */
+User.prototype.getSolutionByTask = function(taskUUID, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(s:Solution)-[:SOLVES]->(t:Task {uuid: {taskUUID}})',
+    'RETURN s'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid,
+    taskUUID: taskUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) {
+      err = new Error('Du hast noch keine Lösung für diese Aufgabe');
+      err.status = 404;
+      err.name = 'SolutionNotFound';
+      return callback(err);
+    }
+    callback(null, new Solution(result[0].s));
+  });
+
+};
+
+/**
+ * @function Überprüft ob der User die Node {id} erstellt hat oder nicht
+ * @param {string} nodeUUID UUID der zu überprüfenden Node
+ * @returns true/false
+ */
+User.prototype.hasCreated = function(nodeUUID, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(n {uuid: {nodeUUID}})',
+    'RETURN n'
+  ].join('\n');
+
+  var params = {
+    nodeUUID: nodeUUID,
+    userUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    return callback(null, result.length === 0 ? false : true);
+  });
+
+};
+
+/**
+ * @function Bewertet die Node {nodeUUID} mit der Bewertung {rating}
+ * Falls bereits eine Bewertung besteht wird sie überschrieben
+ * @param {string} nodeUUID UUID der zu bewertenden Node
+ * @param {int} rating Bewertung als Integer (0-5)
+ */
+User.prototype.rate = function(nodeUUID, rating, callback) {
+
+  if(rating < 0 || rating > 5) {
+    var err = new Error('Die Bewertung muss zwischen 0 und 5 liegen');
+    err.status = 409;
+    return callback(err);
+  }
+
+  // Überprüfe ob der Nutzer die Node selbst erstellt hat, falls ja sollte er sie nicht bewerten können
+  this.hasCreated(nodeUUID, function(err, result) {
+    if(err) return callback(err);
+    if(result) {
+      // Fehler
+      err = new Error('Du kannst nicht deine eigenen Beiträge bewerten');
+      err.status = 409;
+      err.name = 'CheekyUser';
+      return callback(err);
+    } else {
+      // User darf bewerten
+      var self = this;
+
+      var query = [
+        'MERGE (u:User {uuid: {userUUID}})-[r:RATES]->(n {uuid: {nodeUUID}})',
+        'ON CREATE SET r.rating = {rating}',
+        'ON MATCH SET r.rating = {rating}'
+      ].join('\n');
+
+      var params = {
+        nodeUUID: nodeUUID,
+        userUUID: self.uuid,
+        rating: rating
+      };
+
+      db.cypher({
+        query: query,
+        params: params
+      }, function(err, result) {
+        return callback(err, true);
+      });
+    }
+  });
+
+};
 
 /**
  * @function Fügt Metadaten hinzu
@@ -404,6 +590,7 @@ User.prototype.addMetadata = function (apiVersion) {
   links.ownTasks = base + '/tasks/created';
   links.solvedTasks = base + '/tasks/solved';
   links.infos = base + '/infos';
+  links.solutions = base + '/solutions';
 
   this.links = links;
 

@@ -24,6 +24,7 @@ var Node = require('./node');
 var Task = require('./task');
 var Comment = require('./comment');
 var User = require('./user');
+var Degree = require('./degree');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -70,14 +71,12 @@ Object.defineProperty(Solution.prototype, 'author', {
 /**
  * @function get Statische Gettermethode für Lösungen
  * @param {string} uuid UUID der gesuchten Lösung
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Solution.get = function (uuid, callback) {
 
   var query = [
-    'MATCH (creator:User)-[:CREATED]->(s:Solution {uuid: {uuid}})',
-    'OPTIONAL MATCH (s)<-[r:RATES]-(u:User)',
-    'RETURN s, creator, avg(r.rating) as rating, length(collect(r)) as votes'
+    'MATCH (s:Solution {uuid: {uuid}})',
+    'RETURN s'
   ].join('\n');
 
   var params = {
@@ -96,9 +95,6 @@ Solution.get = function (uuid, callback) {
       return callback(err);
     }
     // erstelle neue Lösungs-Instanz und gib diese zurück
-    result[0].s.properties.rating = result[0].rating;
-    result[0].s.properties.votes = result[0].votes;
-    result[0].s.properties.author = new User(result[0].creator);
     var l = new Solution(result[0].s);
     callback(null, l);
   });
@@ -107,14 +103,12 @@ Solution.get = function (uuid, callback) {
 
 /**
  * @function get Statische Gettermethode für ALLE Lösungen
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Solution.getAll = function (callback) {
 
   var query = [
-    'MATCH (creator:User)-[:CREATED]->(s:Solution)',
-    'OPTIONAL MATCH (s)<-[r:RATES]-(u:User)',
-    'RETURN s, creator, avg(r.rating) as rating, length(collect(r)) as votes'
+    'MATCH (s:Solution)',
+    'RETURN s'
   ].join('\n');
 
   db.cypher({
@@ -123,9 +117,6 @@ Solution.getAll = function (callback) {
     if (err) return callback(err);
     // Erstelle ein Array von Lösungen aus dem Ergebnisdokument
     var loesungen = result.map(function (e) {
-      e.s.properties.rating = e.rating;
-      e.s.properties.votes = e.votes;
-      e.s.properties.author = new User(e.creator);
       return new Solution(e.s);
     });
     callback(null, loesungen);
@@ -139,7 +130,6 @@ Solution.getAll = function (callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} taskUUID UUID der Aufgaben-Node für die die Lösung gilt
  * @param {string} userUUID UUID des Users, der die Lösung angefertigt hat
- * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
  */
 Solution.create = function (properties, taskUUID, userUUID, callback) {
 
@@ -152,11 +142,13 @@ Solution.create = function (properties, taskUUID, userUUID, callback) {
   }
 
   properties.createdAt = parseInt(moment().format('X'));
+  properties.author = userUUID;
+  properties.task = taskUUID;
 
   var query = [
     'MATCH (a:Task {uuid: {task}}), (u:User {uuid: {author}})',
-    'CREATE (s:Solution {properties})',
-    'CREATE (a)<-[r:SOLVES]-(s)<-[r2:CREATED]-(u)',
+    'MERGE (a)<-[r1:SOLVES]-(s:Solution)<-[r2:CREATED]-(u)',
+    'ON CREATE SET s = {properties}',
     'return s'
   ].join('\n');
 
@@ -174,17 +166,26 @@ Solution.create = function (properties, taskUUID, userUUID, callback) {
     if (err) return callback(err);
     // falls es kein Ergebnis gibt wurde die neue Lösung nicht erstellt da es keinen passenden Autor oder Aufgabe gibt
     if (result.length === 0) {
-      err = new Error('D Aufgabe `' + taskUUID + '` existiert nicht');
+      err = new Error('Die Aufgabe `' + taskUUID + '` existiert nicht');
       err.status = 404;
       err.name = 'TaskOrUserNotFound';
       return callback(err);
     }
 
+    // obige Query fängt nicht den Fall ab, falls bereits eine Lösung bestand
+    if(result[0].s.properties.createdAt !== properties.createdAt) {
+      // Lösung bestand bereits
+      err = new Error('Du hast die Aufgabe bereits gelöst');
+      err.status = 409;
+      err.name = 'TaskAlreadySolved';
+      return callback(err);
+    }
+
     // hole gerade erstellte Lösung aus der Datenbank
-    dbhelper.getNodeById(result[0].s._id, function (err, result) {
+    dbhelper.getNodeByID(result[0].s._id, function (err, node) {
       if (err) return callback(err);
       // erstelle neue Lösungsinstanz und gib diese zurück
-      var l = new Solution(result[0].x);
+      var l = new Solution(node);
       callback(null, l);
     });
   });
@@ -223,15 +224,15 @@ Solution.prototype.getTask = function (callback) {
 };
 
 /**
- * @function Gibt den Autor zurück
+ * @function Middleware um den Studiengang, zu dem diese Aufgabe gehört, im Request zu speichern
  */
-Solution.prototype.getAuthor = function (callback) {
+Solution.prototype.getParentDegree = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (s:Solution {uuid: {uuid}})<-[:CREATED]-(u:User)',
-    'RETURN u'
+    'MATCH (s:Solution {uuid: {uuid}})-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
+    'RETURN d'
   ].join('\n');
 
   var params = {
@@ -241,41 +242,8 @@ Solution.prototype.getAuthor = function (callback) {
   db.cypher({
     query: query,
     params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-    var u = new User(result[0].u);
-    callback(null, u);
-  });
-
-};
-
-/**
- * @function Gibt alle Kommentare zu dieser Lösung zurück
- */
-Solution.prototype.getComments = function (callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (s:Solution {uuid: {uuid}})<-[:BELONGS_TO]-(c:Comment)',
-    'RETURN c'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, comments) {
-    if (err) return callback(err);
-
-    comments = comments.map(function (c) {
-      c = new Comment(c.c);
-      return c;
-    });
-    callback(null, comments);
+  }, function(err, result) {
+    callback(err, new Degree(result[0].d));
   });
 
 };
@@ -291,9 +259,10 @@ Solution.prototype.addMetadata = function (apiVersion) {
 
   var links = {};
   links.ref = base;
-  links.author = base + '/author';
+  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  links.task = apiVersion + '/tasks/' + encodeURIComponent(this.properties.task);
   links.comments = base + '/comments';
-  links.task = base + '/task';
+  links.rating = base + '/rating';
   this.links = links;
 
 };

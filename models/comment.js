@@ -25,6 +25,7 @@ var Task = require('./task');
 var Info = require('./info');
 var Solution = require('./solution');
 var User = require('./user');
+var Degree = require('./degree');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -36,14 +37,9 @@ Comment.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Kommentar-Nodes für Comment#create
 Comment.VALIDATION_INFO = {
-  author: {
+  comment: {
     required: true,
-    minLength: 36,
-    message: 'Muss einen Autor haben.'
-  },
-  description: {
-    required: true,
-    message: 'Muss eine Beschreibung haben'
+    message: 'Muss einen Textteil haben'
   }
 };
 
@@ -108,6 +104,41 @@ Comment.get = function (uuid, callback) {
 };
 
 /**
+ * @function Gibt einen bestimmten Kommentar zurück der zu einer bestimmten Node gehört
+ * @param {string} commentUUID UUID des Kommentars
+ * @param {string} nodeUUID UUID der Zielnode des Kommentars
+ */
+Comment.getCommentByIDAndNode = function(commentUUID, nodeUUID, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (a {uuid: {nodeUUID}})<-[r:BELONGS_TO]-(c:Comment {uuid: {commentUUID}})',
+    'RETURN c'
+  ].join('\n');
+
+  var params = {
+    nodeUUID: nodeUUID,
+    commentUUID: commentUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) {
+      err = new Error('Kommentar `'+commentUUID+'` für die Node `'+nodeUUID+'` existiert nicht');
+      err.status = 404;
+      err.name = 'CommentNotFound';
+      return callback(err);
+    }
+    callback(null, new Comment(result[0].c));
+  });
+
+};
+
+/**
  * @function get Statische Gettermethode für ALLE Kommentare
  * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
@@ -153,61 +184,43 @@ Comment.create = function (properties, targetUUID, userUUID, callback) {
   }
 
   properties.createdAt = parseInt(moment().format('X'));
+  properties.author = userUUID;
 
-  // überprüfe ob targetUUID zu einer Node gehört die überhaupt kommentierbar ist
-  dbhelper.isCommentable(targetUUID, function (err, commentable) {
+  var query = [
+    'MATCH (a {uuid: {target}}), (u:User {uuid: {author}})',
+    'WHERE (a:Task) or (a:Info) or (a:Comment) or (a:Solution)',
+    'CREATE (a)<-[r:BELONGS_TO]-(c:Comment {properties})<-[r2:CREATED]-(u)',
+    'return c'
+  ].join('\n');
+
+  var params = {
+    properties: properties,
+    target: targetUUID,
+    author: userUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function (err, result) {
+
     if (err) return callback(err);
-    if (commentable) {
-
-      var query = [
-        'MATCH (a:Target {uuid: {target}}), (u:User {uuid: {author}})',
-        'CREATE (c:Comment {properties})',
-        'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(c)<-[r2:CREATED]-(u)',
-        'return c'
-      ].join('\n');
-
-      var params = {
-        properties: properties,
-        target: targetUUID,
-        author: userUUID
-      };
-
-      db.cypher({
-        query: query,
-        params: params
-      }, function (err, result) {
-
-        if (err) return callback(err);
-
-        // falls es kein Ergebnis gibt wurde der neue Kommentar nicht erstellt da es keinen passenden Autor oder Ziel gibt
-        if (result.length === 0) {
-          err = new Error('Der Benutzer `' + userUUID + '` oder das Ziel `' + targetUUID + '` existieren nicht');
-          err.status = 404;
-          err.name = 'TargetOrUserNotFound';
-
-          return callback(err);
-        }
-
-        // hole gerade erstellten Kommentar aus der Datenbank
-        dbhelper.getNodeById(result[0].c._id, function (err, node) {
-          if (err) return callback(err);
-          // erstelle neue Kommentarinstanz und gib diese zurück
-          var c = new Comment(node[0].c);
-          callback(null, c);
-        });
-
-      });
-
-    } else {
-
-      // Fehler werfen
-      var e = new Error('Die Node ´' + targetUUID + '´ ist nicht kommentierbar');
-      e.status = 409;
-      e.name = 'TargetNotCommentable';
-
-      callback(e);
-
+    // falls es kein Ergebnis gibt wurde der neue Kommentar nicht erstellt da es keinen passenden Autor oder Ziel gibt
+    if (result.length === 0) {
+      err = new Error('Der Benutzer `' + userUUID + '` oder das Ziel `' + targetUUID + '` existieren nicht');
+      err.status = 404;
+      err.name = 'TargetOrUserNotFound';
+      return callback(err);
     }
+
+    // hole gerade erstellten Kommentar aus der Datenbank
+    dbhelper.getNodeByID(result[0].c._id, function (err, node) {
+      if (err) return callback(err);
+      // erstelle neue Kommentarinstanz und gib diese zurück
+      var c = new Comment(node);
+      callback(null, c);
+    });
+
   });
 
 };
@@ -217,7 +230,7 @@ Comment.create = function (properties, targetUUID, userUUID, callback) {
 /**
  * @function Gibt zugehörige Node, welche durch diesen Kommentar kommentiert wurde, zurück
  */
-Comment.prototype.getTarget = function (callback) {
+Comment.prototype.getParent = function (callback) {
 
   var self = this;
 
@@ -252,15 +265,15 @@ Comment.prototype.getTarget = function (callback) {
 };
 
 /**
- * @function Gibt den Autor zurück
+ * @function Middleware um den Studiengang, zu dem diese Info gehört, im Request zu speichern
  */
-Comment.prototype.getAuthor = function (callback) {
+Comment.prototype.getParentDegree = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (c:Comment {uuid: {uuid}})<-[:CREATED]-(u:User)',
-    'RETURN u'
+    'MATCH (c:Comment {uuid: {uuid}})-[:BELONGS_TO]->()-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
+    'RETURN d'
   ].join('\n');
 
   var params = {
@@ -270,10 +283,8 @@ Comment.prototype.getAuthor = function (callback) {
   db.cypher({
     query: query,
     params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-    var u = new User(result[0].u);
-    callback(null, u);
+  }, function(err, result) {
+    callback(err, new Degree(result[0].d));
   });
 
 };
@@ -289,8 +300,8 @@ Comment.prototype.addMetadata = function (apiVersion) {
 
   var links = {};
   links.ref = base;
-  links.author = base + '/author';
-  links.target = base + '/target';
+  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  links.parent = base + '/parent';
   this.links = links;
 
 };

@@ -1,113 +1,102 @@
 'use strict';
 
 /**
- * @file Routen für Lösungen anlegen
+ * @file Routen für Lernziele anlegen
  */
 
 var express = require('express');
 var router = express.Router();
-var Solution = require('../../models/solution');
 var config = require('../../config/config');
+var helper = require('./helper/middleware');
+var auth = require('./auth/auth');
 
-var apiVersion = config.HOST_URL + '/api/v1';
+var Task = require('../../models/task');
+var Comment = require('../../models/comment');
+var Solution = require('../../models/solution');
 
-// Alle Lösungen zurückgeben
-router.get('/solutions', function(req, res, next) {
+var API_VERSION = config.HOST_URL + '/api/v1';
 
-  Solution.getAll(function(err, result) {
-
-    if(err) return next(err);
-    result.forEach(function(t) {
-      t.addMetadata(apiVersion);
-      t.author.addMetadata(apiVersion);
-    });
-    res.json(result);
-
-  });
-
-});
+/**************************************************
+              DEGREE RESTRICTED ROUTES
+**************************************************/
 
 // Gibt eine bestimmte Lösung zurück
-router.get('/solutions/:uuid', function(req, res, next) {
+router.get('/solutions/:solutionUUID', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+  var solution = req._solution;
+  solution.addMetadata(API_VERSION);
+  res.json(solution);
+});
 
-  Solution.get(req.params.uuid, function(err, t) {
+// Gibt Bewertung der Aufgabe zurück
+router.get('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  task.getRating(function(err, rating) {
     if(err) return next(err);
-    t.addMetadata(apiVersion);
-    t.author.addMetadata(apiVersion);
-    res.json(t);
+    res.json(rating);
   });
 
 });
 
-// Gibt den Autor für eine bestimmte Lösung zurück
-router.get('/solutions/:uuid/author', function(req, res, next) {
+// Gibt Kommentare zu der Aufgabe zurück
+router.get('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
-  Solution.get(req.params.uuid, function(err, s) {
+  var task = req._task;
+  task.getComments(function(err, comments) {
     if(err) return next(err);
-    s.author(function(err, u) {
-      if(err) return next(err);
-      u.addMetadata(apiVersion);
-      res.json(u._node);
+    comments.forEach(function(i) {
+      i.addMetadata(API_VERSION);
     });
+    res.json(comments);
   });
 
 });
 
-// Gibt die Aufgabe für eine bestimmte Lösung zurück
-router.get('/solutions/:uuid/task', function(req, res, next) {
+// Fügt Rating hinzu
+router.post('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
-  Solution.get(req.params.uuid, function(err, s) {
-    if(err) return next(err);
-    s.task(function(err, a) {
-      if(err) return next(err);
-      a.addMetadata(apiVersion);
-      res.json(a._node);
-    });
-  });
-
-});
-
-// Gibt alle Kommentare für eine bestimmte Lösung zurück
-router.get('/solutions/:uuid/comments', function(req, res, next) {
-
-  Solution.get(req.params.uuid, function(err, s) {
-    if(err) return next(err);
-    s.comments(function(err, comments) {
-      if(err) return next(err);
-      comments = comments.map(function(c) {
-        c.addMetadata(apiVersion);
-        return c._node;
-      });
-      res.json(comments);
-    });
-  });
-
-});
-
-
-// Aufgaben erstellen
-router.post('/solutions', function(req, res, next) {
-
-  req.checkBody('description', 'Inhalt der Lösung fehlt').notEmpty();
-  req.checkBody('task', 'UUID der Aufgabe fehlt').notEmpty();
-
+  req.checkBody('rating', 'Bewertung fehlt').notEmpty();
+  req.checkBody('rating', 'Der Bewertungsparameter muss ein Ganzzahlwert sein').isInt();
   var errors = req.validationErrors();
   if(errors) {
     return next(errors);
   }
 
-  var taskUUID = req.body.task;
-  var properties = req.body;
-
-  Solution.create(properties, taskUUID, req.user.uuid, function(err, s) {
-
+  var user = req.user;
+  user.rate(req.params.solutionUUID, parseInt(req.body.rating), function(err, result) {
     if(err) return next(err);
-    res.status(201).json(s);
-
+    res.status(201).json({success: true});
   });
 
 });
 
-// TODO überhaupt iwas löschen/updaten?!
+// Fügt Kommentar hinzu
+router.post('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+
+  req.checkBody('comment', 'Inhalt des Kommentars fehlt').notEmpty();
+  var errors = req.validationErrors();
+  if(errors) {
+    return next(errors);
+  }
+
+  Comment.create(req.body, req.params.solutionUUID, req.user.uuid, function(err, comment) {
+    if(err) return next(err);
+    comment.addMetadata(API_VERSION);
+    res.status(201).json(comment);
+  });
+
+});
+
+// Aufgabe an dem die Lösung hängt
+router.get('/solutions/:solutionUUID/task', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  task.getParent(function(err, target) {
+    if(err) return next(err);
+    target.addMetadata(API_VERSION);
+    res.json(target);
+  });
+
+});
 
 module.exports = router;

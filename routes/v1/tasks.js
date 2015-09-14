@@ -1,114 +1,148 @@
 'use strict';
 
 /**
- * @file Routen für Aufgaben anlegen
+ * @file Routen für Lernziele anlegen
  */
 
 var express = require('express');
 var router = express.Router();
-var Task = require('../../models/task');
 var config = require('../../config/config');
+var helper = require('./helper/middleware');
+var auth = require('./auth/auth');
 
-var apiVersion = config.HOST_URL + '/api/v1';
+var Target = require('../../models/target');
+var Info = require('../../models/info');
+var Task = require('../../models/task');
+var Comment = require('../../models/comment');
+var Solution = require('../../models/solution');
 
-// Alle Aufgaben zurückgeben
-router.get('/tasks', function(req, res, next) {
+var API_VERSION = config.HOST_URL + '/api/v1';
 
-  Task.getAll(function(err, result) {
-
-    if(err) return next(err);
-    result.forEach(function(e) {
-      e.addMetadata(apiVersion);
-      e.author.addMetadata(apiVersion);
-    });
-    res.json(result);
-
-  });
-
-});
+/**************************************************
+              DEGREE RESTRICTED ROUTES
+**************************************************/
 
 // Gibt eine bestimmte Aufgabe zurück
-router.get('/tasks/:uuid', function(req, res, next) {
+router.get('/tasks/:taskUUID', helper.prefetchTask, auth.restricted, function(req, res, next) {
+  var task = req._task;
+  task.addMetadata(API_VERSION);
+  res.json(task);
+});
 
-  Task.get(req.params.uuid, function(err, t) {
+// Gibt Bewertung der Aufgabe zurück
+router.get('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  task.getRating(function(err, rating) {
     if(err) return next(err);
-    t.addMetadata(apiVersion);
-    t.author.addMetadata(apiVersion);
-    res.json(t);
+    res.json(rating);
   });
 
 });
 
-// Gibt den Autor für eine bestimmte Aufgabe zurück
-router.get('/tasks/:uuid/author', function(req, res, next) {
+// Gibt Kommentare zu der Aufgabe zurück
+router.get('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, function(req, res, next) {
 
-  Task.get(req.params.uuid, function(err, t) {
+  var task = req._task;
+  task.getComments(function(err, comments) {
     if(err) return next(err);
-    t.getAuthor(function(err, u) {
-      if(err) return next(err);
-      u.addMetadata(apiVersion);
-      res.json(u);
+    comments.forEach(function(i) {
+      i.addMetadata(API_VERSION);
     });
+    res.json(comments);
   });
 
 });
 
-// Gibt alle Lösungen für eine Aufgabe zurück
-router.get('/tasks/:uuid/solutions', function(req, res, next) {
+// Fügt Rating hinzu
+router.post('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, function(req, res, next) {
 
-  Task.get(req.params.uuid, function(err, a) {
-
-    if(err) return next(err);
-    a.getSolutions(function(err, solutions) {
-      if(err) return next(err);
-      solutions.forEach(function(s) {
-        s.addMetadata(apiVersion);
-      });
-      res.json(solutions);
-    });
-
-  });
-
-});
-
-// Gibt alle Kommentare für eine Aufgabe zurück
-router.get('/tasks/:uuid/comments', function(req, res, next) {
-
-  Task.get(req.params.uuid, function(err, a) {
-
-    if(err) return next(err);
-    a.getComments(function(err, comments) {
-      if(err) return next(err);
-      comments.forEach(function(s) {
-        s.addMetadata(apiVersion);
-      });
-      res.json(comments);
-    });
-
-  });
-
-});
-
-
-// Aufgaben erstellen
-router.post('/tasks', function(req, res, next) {
-
-  req.checkBody('description', 'Inhalt der Aufgabe fehlt').notEmpty();
-  req.checkBody('parent', 'UUID des Parents fehlt').notEmpty();
-
+  req.checkBody('rating', 'Bewertung fehlt').notEmpty();
+  req.checkBody('rating', 'Der Bewertungsparameter muss ein Ganzzahlwert sein').isInt();
   var errors = req.validationErrors();
   if(errors) {
     return next(errors);
   }
 
-  var parentUUID = req.body.parent;
-  var properties = req.body;
-
-  Task.create(properties, parentUUID, req.user.uuid, function(err, t) {
-
+  var user = req.user;
+  user.rate(req.params.taskUUID, parseInt(req.body.rating), function(err, result) {
     if(err) return next(err);
-    res.status(201).json(t);
+    res.status(201).json({success: true});
+  });
 
+});
+
+// Fügt Kommentar hinzu
+router.post('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  req.checkBody('comment', 'Inhalt des Kommentars fehlt').notEmpty();
+  var errors = req.validationErrors();
+  if(errors) {
+    return next(errors);
+  }
+
+  Comment.create(req.body, req.params.taskUUID, req.user.uuid, function(err, comment) {
+    if(err) return next(err);
+    comment.addMetadata(API_VERSION);
+    res.status(201).json(comment);
+  });
+
+});
+
+// Alle Lösungen für eine Aufgabe
+router.get('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  task.getSolutions(function(err, solutions) {
+    if(err) return next(err);
+    solutions.forEach(function(s) {
+      s.addMetadata(API_VERSION);
+    });
+    res.json(solutions);
+  });
+
+});
+
+// Lösung des aktuellen Users für eine bestimmte Aufgabe
+router.get('/tasks/:taskUUID/solution', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  var user = req.user;
+
+  user.getSolutionByTask(task.uuid, function(err, solution) {
+    if(err) return next(err);
+    solution.addMetadata(API_VERSION);
+    res.json(solution);
+  });
+
+});
+
+// Neue Lösung für Aufgabe
+router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  req.checkBody('description', 'Inhalt der Lösung fehlt').notEmpty();
+  var errors = req.validationErrors();
+  if(errors) {
+    return next(errors);
+  }
+
+  var task = req._task;
+  Solution.create(req.body, task.uuid, req.user.uuid, function(err, solution) {
+    if(err) return next(err);
+    solution.addMetadata(API_VERSION);
+    res.json(solution);
+  });
+
+});
+
+// Lernziel an dem die Aufgabe hängt
+router.get('/tasks/:taskUUID/target', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  task.getParent(function(err, target) {
+    if(err) return next(err);
+    target.addMetadata(API_VERSION);
+    res.json(target);
   });
 
 });

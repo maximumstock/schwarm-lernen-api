@@ -38,18 +38,27 @@ Degree.VALIDATION_INFO = {
     required: true,
     minLength: 3,
     message: 'Muss einen Namen haben.'
+  },
+  entryKey: {
+    required: true,
+    minLength: 6,
+    message: 'Muss einen Eintragungsschlüssel haben.'
   }
 };
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
-/**
- * @function Propertydefinition für den Namen des Studiengangs
- * @prop {string} name Name des Studiengangs
- */
+// Propertydefinition für den Namen des Studiengangs
 Object.defineProperty(Degree.prototype, 'name', {
   get: function () {
     return this.properties.name;
+  }
+});
+
+// Propertydefinition für den Eintragungsschlüssel des Studiengangs
+Object.defineProperty(Degree.prototype, 'entryKey', {
+  get: function () {
+    return this.properties.entryKey;
   }
 });
 
@@ -58,9 +67,8 @@ Object.defineProperty(Degree.prototype, 'name', {
 // Statische Methoden
 
 /**
- * @function get Statische Gettermethode für Studiengänge
+ * @function Statische Gettermethode für Studiengänge
  * @param {string} name Name des gesuchten Studiengangs
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Degree.get = function (uuid, callback) {
 
@@ -93,8 +101,7 @@ Degree.get = function (uuid, callback) {
 };
 
 /**
- * @function getAll Statische Gettermethode für ALLE Studiengänge
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
+ * @function Statische Gettermethode für ALLE Studiengänge
  */
 Degree.getAll = function (callback) {
 
@@ -109,10 +116,8 @@ Degree.getAll = function (callback) {
     if (err) return callback(err);
 
     // Erstelle ein Array von Modulen aus dem Ergebnisdokument
-    var degrees = [];
-    result.forEach(function (e) {
-      var s = new Degree(e.d);
-      degrees.push(s);
+    var degrees = result.map(function(e) {
+      return new Degree(e.d);
     });
 
     callback(null, degrees);
@@ -123,7 +128,6 @@ Degree.getAll = function (callback) {
 /**
  * @function Erstellt einen neuen Studiengang und speichert ihn in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
- * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
  */
 Degree.create = function (properties, callback) {
 
@@ -143,8 +147,7 @@ Degree.create = function (properties, callback) {
   ].join('\n');
 
   var params = {
-    properties: properties,
-    name: properties.name
+    properties: properties
   };
 
   db.cypher({
@@ -167,11 +170,10 @@ Degree.create = function (properties, callback) {
     if (err) return callback(err);
     // gerade erstellte Instanz hat noch keine uuid -> mit `_id` Property nochmal querien
     var id = result[0].d._id;
-
-    dbhelper.getNodeById(id, function (err, result) {
+    dbhelper.getNodeByID(id, function (err, node) {
 
       if (err) return callback(err);
-      var d = new Degree(result[0].x);
+      var d = new Degree(node);
       callback(null, d);
 
     });
@@ -185,7 +187,6 @@ Degree.create = function (properties, callback) {
 /**
  * @function Löscht eine bestehenden Studiengang aus der Datenbank. Ein Studiengang kann nur gelöscht werden, sobald er
  * keine weiteren Beziehungen mehr besitzt
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Degree.prototype.del = function (callback) {
 
@@ -211,7 +212,7 @@ Degree.prototype.del = function (callback) {
 
       err = new Error('Am Studiengang `' + self.name + '` hängen noch Beziehungen.');
       err.name = 'RemainingRelationships';
-      err.status = 400;
+      err.status = 409;
 
     }
 
@@ -226,7 +227,6 @@ Degree.prototype.del = function (callback) {
  * @function Aktualisiert die jeweilige Node mit neuen Informationen
  * @param {object} properties Objekt mit Attribute deren Werte aktualisiert bzw.
  * deren Key-Value-Paare angelegt werden sollen, falls sie nicht bereits bestehen.
- * @param {callback} callback Callbackfunktion, die die aktualisierte Node engegennimmt
  */
 Degree.prototype.patch = function (properties, callback) {
 
@@ -286,7 +286,6 @@ Degree.prototype.patch = function (properties, callback) {
 /**
  * @function Liefert alle Lernziele innerhalb eines Studiengangs die {level} Beziehungen vom Studiengang entfernt sind
  * @param {int} level maximale Beziehungstiefe in der Lernziele gesucht werden sollen
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Degree.prototype.getTargets = function (level, callback) {
 
@@ -317,6 +316,37 @@ Degree.prototype.getTargets = function (level, callback) {
 
 };
 
+// /**
+//  * @function Liefert das Lernziel {targetUUID} innerhalb eines Studiengangs
+//  * @param {int} targetUUID UUID des gesuchten Lernziels in diesem Studiengang
+//  */
+// Degree.prototype.getTargetByID = function (targetUUID, callback) {
+//
+//   var self = this;
+//
+//   var query = [
+//     'MATCH (d:Degree {uuid: {uuid}})<-[r:PART_OF *]-(t:Target {uuid: {targetUUID}})',
+//     'RETURN t'
+//   ].join('\n');
+//
+//   var params = {
+//     uuid: self.uuid,
+//     targetUUID: targetUUID
+//   };
+//
+//   db.cypher({
+//     query: query,
+//     params: params
+//   }, function (err, result) {
+//     if (err) return callback(err);
+//
+//     // Instanz anlegen
+//     var t = new Target(result[0].t);
+//     callback(null, t);
+//   });
+//
+// };
+
 /**
  * @function Gibt alle User zurück die auf diesen Studiengang zugreifen können
  */
@@ -326,7 +356,8 @@ Degree.prototype.getUsers = function (callback) {
 
   var query = [
     'MATCH (d:Degree {uuid: {uuid}})<-[:HAS_ACCESS]-(u:User)',
-    'RETURN u'
+    'RETURN u',
+    'ORDER BY u.name ASC'
   ].join('\n');
 
   var params = {
@@ -344,6 +375,104 @@ Degree.prototype.getUsers = function (callback) {
     callback(null, users);
   });
 
+};
+
+/**
+ * @function Gibt dem User {uuid} Zugriff auf diesen Studiengang
+ * @param {string} uuid UUID des Users der Zugriff bekommen soll
+ * @param {string} enteredEntryKey Der vom User angegebene Anmeldeschlüssel, welcher noch überprüft werden muss
+ * @return null falls erfolgreich
+ */
+Degree.prototype.addUser = function (uuid, enteredEntryKey, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {user}}), (d:Degree {uuid: {degree}, entryKey: {key}})',
+    'CREATE UNIQUE (u)-[:HAS_ACCESS]->(d)'
+  ].join('\n');
+
+  var params = {
+    user: uuid,
+    degree: self.uuid,
+    key: enteredEntryKey
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    return callback(err, null);
+  });
+
+};
+
+/**
+ * @function Gibt dem User {uuid} Zugriff auf diesen Studiengang
+ * @param {string} uuid UUID des Users der Zugriff bekommen soll
+ * @return null falls erfolgreich
+ */
+Degree.prototype.addUserWithoutKey = function (uuid, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {user}}), (d:Degree {uuid: {degree}})',
+    'CREATE UNIQUE (u)-[:HAS_ACCESS]->(d)'
+  ].join('\n');
+
+  var params = {
+    user: uuid,
+    degree: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    return callback(err, null);
+  });
+
+};
+
+/**
+ * @function Überprüft ob der User Zugriff auf diesen Studiengang hat
+ * @param {string} userUUID UUID des zu überprüfenden Users
+ * @returns {boolean} true wenn der User berechtigt ist, andernfalls false
+ */
+Degree.prototype.isAllowedUser = function (userUUID, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (d:Degree {uuid: {degreeUUID}})<-[r:HAS_ACCESS]-(u:User {uuid: {userUUID}})',
+    'RETURN r, u'
+  ].join('\n');
+
+  var params = {
+    degreeUUID: self.uuid,
+    userUUID: userUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) {
+      callback(null, false);
+    } else {
+      callback(null, true);
+    }
+  });
+
+};
+
+/**
+ * @function siehe /routes/auth/auth.js#restricted
+ */
+Degree.prototype.getParentDegree = function(callback) {
+  callback(null, this);
 };
 
 /**

@@ -13,19 +13,30 @@ match (t:Target)-[:PART_OF]->(t2:Target) with range(1,3) as RANGE, t foreach(r i
 // User mit Zugang
 match (d:Degree {name: "Informatik"}) with range(1,20) as RANGE, d foreach(r in RANGE | create (u:User {username: toint(rand()*100)})-[:HAS_ACCESS]->(d));
 
+
+////////////////////////////////////////////////////////////////////////////////////////
+// TEST STUFF
+// DELETE IN PRODUCTION
+match (d:Degree)
+create
+  (u:User:Admin {username: "admin", password: "admin"})-[:HAS_ACCESS]->(d),
+  (u2:User {username: "bene", password: "bene"})-[:HAS_ACCESS]->(d),
+  (u3:User {username: "test", password: "test"});
+/////////////////////////////////////////////////////////////////////////////////////////
+
 // Aufgaben
-match (u:User), (t:Target) where rand() < 0.05 create (u)-[:CREATED]->(ta:Task {description: "Task #" + toint(round(rand()*100))})-[:BELONGS_TO]->(t);
+match (u:User)-[:HAS_ACCESS]-(d:Degree), (t:Target) where rand() < 0.1 create (u)-[:CREATED]->(ta:Task {description: "Task #" + toint(round(rand()*100)), author: u.uuid})-[:BELONGS_TO]->(t);
 
 // Infos
-match (u:User), (t:Target) where rand() < 0.1 create (u)-[:CREATED]->(i:Info {description: "Info #" + toint(round(rand()*100))})-[:BELONGS_TO]->(t);
+match (u:User)-[:HAS_ACCESS]-(d:Degree), (t:Target) where rand() < 0.1 create (u)-[:CREATED]->(i:Info {description: "Info #" + toint(round(rand()*100)), author: u.uuid})-[:BELONGS_TO]->(t);
 
 // Lösungen
-match (u:User), (t:Task) where rand() < 0.05 create (u)-[:CREATED]->(s:Solution {description: "Lösung #" + toint(round(rand()*100))})-[:SOLVES]->(t);
+match (u:User)-[:HAS_ACCESS]-(d:Degree), (t:Task) where rand() < 0.05 create (u)-[:CREATED]->(s:Solution {description: "Lösung #" + toint(round(rand()*100)), author: u.uuid})-[:SOLVES]->(t);
 
 // Kommentare und Ratings
-match (u:User), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
+match (u:User)-[:HAS_ACCESS]-(d:Degree), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
   create unique (u)-[:RATES {rating: toint(round(((rand()*100)%5+1)))}]->(s);
-match (u:User), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
+match (u:User)-[:HAS_ACCESS]-(d:Degree), (s) where (s:Solution or s:Task or s:Info) and rand() < 0.05
   create (u)-[:CREATED]->(c:Comment {text: "Dies ist ein Kommentar"})-[:BELONGS_TO]->(s);
 
 // jeglicher erstellter Content darf nicht vom Ersteller bewertet werden -> Löschen aller solcher Bewertungen aus Testdaten
@@ -40,12 +51,3 @@ foreach (s in solutions | delete s);
 
 // User ohne Zugang
 with range(1,5) as RANGE foreach(r in RANGE | create (u:User {username: toint(rand()*100)}));
-
-
-// TEST STUFF
-// DELETE IN PRODUCTION
-match (d:Degree)
-create
-  (u:User:Admin {username: "admin", password: "admin"})-[:HAS_ACCESS]->(d),
-  (u2:User {username: "bene", password: "bene"})-[:HAS_ACCESS]->(d),
-  (u3:User {username: "test", password: "test"})-[:HAS_ACCESS]->(d);

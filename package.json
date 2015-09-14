@@ -21,7 +21,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "mocha test"
+    "test": "mocha test/*"
   },
   "keywords": [],
   "dependencies": {
@@ -31,6 +31,7 @@
     "express": "^4.13.2",
     "express-validator": "^2.14.2",
     "jsonwebtoken": "^5.0.5",
+    "lodash": "^3.10.1",
     "moment": "^2.10.6",
     "morgan": "^1.6.1",
     "neo4j": "^2.0.0-RC2",
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "chai": "^3.2.0",
-    "mocha": "^2.2.5"
+    "mocha": "^2.2.5",
+    "supertest": "^1.1.0"
   }
 }
