@@ -67,7 +67,7 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
   }
 
   var target = req._target;
-  Info.create(req.body, target.uuid, function(err, info) {
+  Info.create(req.body, target.uuid, req.user.uuid, function(err, info) {
     if(err) return next(err);
     info.addMetadata(API_VERSION);
     res.json(info);
@@ -85,7 +85,7 @@ router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted
   }
 
   var target = req._target;
-  Task.create(req.body, target.uuid, function(err, task) {
+  Task.create(req.body, target.uuid, req.user.uuid, function(err, task) {
     if(err) return next(err);
     task.addMetadata(API_VERSION);
     res.json(task);
@@ -108,7 +108,7 @@ router.post('/targets/:targetUUID/targets', auth.adminOnly, helper.prefetchTarge
   }
 
   var target = req._target;
-  Info.create(req.body, target.uuid, function(err, info) {
+  Target.create(req.body, target.uuid, function(err, info) {
     if(err) return next(err);
     info.addMetadata(API_VERSION);
     res.json(info);

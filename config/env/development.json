@@ -4,6 +4,8 @@
   "NEO4J_URL"   : "http://neo4j:speedy66@localhost:7474/graphaware",
   "HOST_URL"    : "",
   "API_SECRET"  : "fightmeirlf4gg0t",
-  "DISABLE_AUTH": false
+  "DISABLE_AUTH": false,
+  "DEFAULT_USERNAME_LENGTH": 7,
+  "DEFAULT_PASSWORD_LENGTH": 7
 
 }
