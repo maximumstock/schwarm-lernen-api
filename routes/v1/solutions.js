@@ -30,8 +30,8 @@ router.get('/solutions/:solutionUUID', helper.prefetchSolution, auth.restricted,
 // Gibt Bewertung der Aufgabe zurück
 router.get('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
-  var task = req._task;
-  task.getRating(function(err, rating) {
+  var solution = req._solution;
+  solution.getRating(function(err, rating) {
     if(err) return next(err);
     res.json(rating);
   });
@@ -41,8 +41,8 @@ router.get('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.rest
 // Gibt Kommentare zu der Aufgabe zurück
 router.get('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
-  var task = req._task;
-  task.getComments(function(err, comments) {
+  var solution = req._solution;
+  solution.getComments(function(err, comments) {
     if(err) return next(err);
     comments.forEach(function(i) {
       i.addMetadata(API_VERSION);
@@ -90,8 +90,8 @@ router.post('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.r
 // Aufgabe an dem die Lösung hängt
 router.get('/solutions/:solutionUUID/task', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
-  var task = req._task;
-  task.getParent(function(err, target) {
+  var solution = req._solution;
+  solution.getParent(function(err, target) {
     if(err) return next(err);
     target.addMetadata(API_VERSION);
     res.json(target);
