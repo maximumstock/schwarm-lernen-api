@@ -42,4 +42,26 @@ router.get('/users/:userUUID', function(req, res, next) {
 
 });
 
+
+/**************************************************
+                ADMIN ONLY ROUTES
+**************************************************/
+
+// Einen bestimmten Useraccount deaktivieren (nicht löschen)
+router.delete('/users/:userUUID', auth.adminOnly, function(req, res, next) {
+
+  User.get(req.params.userUUID, function(err, user) {
+    if(err) return next(err);
+    user.toggleInactive(function(err, result) {
+      if(err) return next(err);
+      User.get(req.params.userUUID, function(err, nuser) {
+        if(err) return next(err);
+        nuser.addMetadata(API_VERSION);
+        res.json(nuser);
+      });
+    });
+  });
+
+});
+
 module.exports = router;

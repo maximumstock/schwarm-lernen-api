@@ -12,6 +12,7 @@ var async = require('async');
 var Degree = require('../../models/degree');
 var Target = require('../../models/target');
 var User = require('../../models/user');
+var Config = require('../../models/config');
 
 var auth = require('./auth/auth');
 var helper = require('./helper/middleware');
@@ -91,6 +92,18 @@ router.get('/degrees/:degreeUUID/users', helper.prefetchDegree, auth.restricted,
 
 });
 
+// Gibt Konfiguration des Studiengangs zurück
+router.get('/degrees/:degreeUUID/config', helper.prefetchDegree, auth.restricted, function(req, res, next) {
+
+  var degree = req._degree;
+  degree.getConfig(function(err, config) {
+    if(err) return next(err);
+    config.addMetadata(API_VERSION);
+    res.json(config);
+  });
+
+});
+
 /**************************************************
               ADMIN ONLY ROUTES
 **************************************************/
@@ -104,10 +117,24 @@ router.post('/degrees', auth.adminOnly, function(req, res, next) {
     return next(errors);
   }
 
-  Degree.create(req.body, function(err, result) {
+  var conf = req.body.config || Config.DEFAULT_CONFIG;
+  delete req.body.config;
+
+  Degree.create(req.body, function(err, degree) {
     if (err) return next(err);
-    result.addMetadata(API_VERSION);
-    res.status(201).json(result);
+    // create config
+    Config.create(conf, degree.uuid, function(actualError, config) {
+      if(actualError) {
+        return degree.del(function(err, result) {
+          if(err) return next(err);
+          return next(actualError);
+        });
+      }
+      config.addMetadata(API_VERSION);
+      degree.addMetadata(API_VERSION);
+      degree.properties.config = config;
+      res.status(201).json(degree);
+    });
   });
 
 });
@@ -136,6 +163,34 @@ router.put('/degrees/:degreeUUID', auth.adminOnly, function(req, res, next) {
       if (err) return next(err);
       nd.addMetadata(API_VERSION);
       res.json(nd);
+    });
+  });
+
+});
+
+// Config aktualsieren
+router.put('/degrees/:degreeUUID/config', auth.adminOnly, function(req, res, next) {
+
+  try {
+    if(req.body.solutionShare) req.body.solutionShare = parseInt(req.body.solutionShare);
+    if(req.body.taskShare) req.body.taskShare = parseInt(req.body.taskShare);
+    if(req.body.infoShare) req.body.infoShare = parseInt(req.body.infoShare);
+    if(req.body.infoPoints) req.body.infoPoints = parseInt(req.body.infoPoints);
+    if(req.body.taskPoints) req.body.taskPoints = parseInt(req.body.taskPoints);
+    if(req.body.solutionPoints) req.body.solutionPoints = parseInt(req.body.solutionPoints);
+  } catch (e) {
+    return next(e);
+  }
+
+  Degree.get(req.params.degreeUUID, function(err, d) {
+    if (err) return next(err);
+    d.getConfig(function(err, config) {
+      if(err) return next(err);
+      config.patch(req.body, function(err, nconfig) {
+        if(err) return next(err);
+        nconfig.addMetadata(API_VERSION);
+        res.json(nconfig);
+      });
     });
   });
 

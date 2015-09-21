@@ -36,11 +36,22 @@ Außerdem können keine Resourcen gelöscht werden an denen noch Nodes/Beziehung
 
 Beim erneuten `POST`-Requests an `/.../rating` zum Bewerten einer bereits bewerteten Ressource wird die alte Bewertung überschrieben
 
+Alle Aufgaben, Infos und Lösungen haben einen Aktivitätsstatus, der als Property `status` mitgesendet wird. Inaktive Ressourcen werden unter anderem
+nicht zur Erfüllung von Arbeitspaketen oder dem Gesamtkontostand eines Nutzers dazugezählt.
+
+### Punktekonzept
+Jeder Benutzer sammelt beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch für das Bewerten von fremden Inhalten Punkte.
+Die Konfiguration des jeweiligen Studiengangs bestimmt wie viele Punkte für die einzelnen Aktionen verdient werden können.
+
+### Bewertungskonzept
+Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet werden. Für das Bewerten von Inhalten bekommen sowohl die Bewertenden als auch die Bewerteten Nutzer Punkte. Siehe `Degrees/config` für weitere Informationen.
+
 ### Studiengänge/Degrees
 * `GET /degrees` - Public - Alle Studiengänge
 * `GET /degrees/:degreeUUID` - Public - Studiengang mit der ID `:degreeUUID`
 * `GET /degrees/:degreeUUID/targets` - AccessRestricted - Alle Lernziele des Studiengangs `:degreeUUID`
 * `GET /degrees/:degreeUUID/users` - AccessRestricted - Alle User die Zugriff auf den Studiengang `:degreeUUID` haben
+* `GET /degrees/:degreeUUID/config` - AccessRestricted - Die Konfiguration des Studiengangs
 * `POST /degrees` - AdminOnly - Neuen Studiengang erstellen
 	* name - String - Name des neuen Studiengangs
 * `POST /degrees/:degreeUUID/targets` - AdminOnly - Ein neues Lernziel an den Studiengang `:degreeUUID` hängen
@@ -48,6 +59,14 @@ Beim erneuten `POST`-Requests an `/.../rating` zum Bewerten einer bereits bewert
 * `POST /degrees/:degreeUUID/users` - AdminOnly - Generierung von Username-Passwort-Kombinationen, die Zugriff auf den Studiengang `:degreeUUID` haben
 	* amount - Integer - Anzahl der zu generierenden Accounts
 * `PUT /degrees/:degreeUUID` - AdminOnly - Studiengang mit der ID `:degreeUUID` aktualisieren
+* `PUT /degrees/:degreeUUID/config` - AdminOnly - Konfiguration des Studiengangs `:degreeUUID` aktualisieren
+	* solutionShare - Integer - Prozentwert die Lösungen in einem Arbeitspaket ausmachen sollen
+	* infoShare - Integer - Prozentwert die Infos in einem Arbeitspaket ausmachen sollen
+	* taskShare - Integer - Prozentwert die Aufgaben in einem Arbeitspaket ausmachen sollen
+	* solutionPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Lösung erhalten soll
+	* infoPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Info erhalten soll
+	* taskPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Aufgabe erhalten soll
+	* ratePoints - Integer - Anzahl der Punkte die jemand für das Bewerten von fremden Inhalten erhalten soll
 * `DELETE /degrees/:degreeUUID` - AdminOnly - Studiengang mit der ID `:degreeUUID` löschen
 
 
@@ -69,45 +88,53 @@ Beim erneuten `POST`-Requests an `/.../rating` zum Bewerten einer bereits bewert
 ### Aufgaben/Tasks
 * `GET /tasks/:taskUUID` - AccessRestricted - Liefert die Aufgabe `:taskUUID`
 * `GET /tasks/:taskUUID/target` - AccessRestricted - Lernziel an dem die Aufgabe `:taskUUID` hängt
-* `GET /tasks/:taskUUID/rating` - AccessRestricted - Liefert die Bewertung der Aufgabe `:taskUUID`
+* `GET /tasks/:taskUUID/rating` - AccessRestricted - Liefert alle Bewertungen der Aufgabe `:taskUUID` und die des aktuellen Users, falls vorhanden
 * `GET /tasks/:taskUUID/solution` - AccessRestricted - Liefert die eine bestehende Lösung für den aktuellen User falls eine besteht
 * `GET /tasks/:taskUUID/comments` - AccessRestricted - Liefert die Kommentare zur Aufgabe `:taskUUID`
 * `GET /tasks/:taskUUID/solutions` - AccessRestricted - Alle Lösungen zur Aufgabe `:taskUUID`
 * `POST /tasks/:taskUUID/comments` - AccessRestricted - Neuen Kommentar zur Aufgabe `:taskUUID` erstellen
 	* comment - String - Inhalt des Kommentars
 * `POST /tasks/:taskUUID/rating` - AccessRestricted - Neue Bewertung zur Aufgabe `:taskUUID` abgeben
-	* rating - Integer (0-5) - Wert der Bewertung
+	* r1, r2, r3, r4, r5 - Integer (0-5) - Werte für verschiedene Parameter (bisher ohne Zuordnung)
+	* comment - String - Zusatzkommentar zur Bewertung
 * `POST /tasks/:taskUUID/solutions` - AccessRestricted - Neue Lösung für die Aufgabe `:taskUUID`
 	* description - String - Inhalt der Lösung
+* `PUT /tasks/:taskUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Aufgabe
 
 ---
 ### Lösungen/Solutions
 * `GET /solutions/:solutionUUID` - AccessRestricted - Liefert die Lösung `:solutionUUID`
 * `GET /solutions/:solutionUUID/task` - AccessRestricted - Liefert die Aufgabe zur Lösung `:solutionUUID`
-* `GET /solutions/:solutionUUID/rating` - AccessRestricted - Liefert die Bewertung der Lösung `:solutionUUID`
+* `GET /solutions/:solutionUUID/rating` - AccessRestricted - Liefert alle Bewertungen der Lösung `:solutionUUID` und die des aktuellen Users, falls vorhanden
 * `GET /solutions/:solutionUUID/comments` - AccessRestricted - Liefert die Kommentare zur Lösung `:solutionUUID`
 * `POST /solutions/:solutionUUID/rating` - AccessRestricted - Abgeben einer Bewertung für die Lösung `:solutionUUID`
-	* rating - Integer (0-5) - Wert der Bewertung
+	* r1, r2, r3, r4, r5 - Integer (0-5) - Werte für verschiedene Parameter (bisher ohne Zuordnung)
+	* comment - String - Zusatzkommentar zur Bewertung
 * `POST /solutions/:solutionUUID/comments` - AccessRestricted - Erstellen eines Kommentars zur Lösung `:solutionUUID`
 	* comment - String - Inhalt des Kommentars
+* `PUT /solutions/:soltuionUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Lösung
 
 ---
 ### Infos
 * `GET /infos/:infoUUID` - AccessRestricted - Liefert die Info `:infoUUID`
-* `GET /infos/:infoUUID/target` - AccessRestricted - 
+* `GET /infos/:infoUUID/target` - AccessRestricted -
 * `GET /infos/:infoUUID/comments` - AccessRestricted - Alle Kommentare zur Info `:infoUUID`
-* `GET /infos/:infoUUID/rating` - AccesssRestricted - Die durchschnittliche Bewertung der Info `:infoUUID`
+* `GET /infos/:infoUUID/rating` - AccesssRestricted - Liefert alle Bewertungen der Info `:infoUUID` und die des aktuellen Users, falls vorhanden
 * `POST /infos/:infoUUID/comments` - AccessRestricted - Erstellen eines neuen Kommentars zur Info `:infoUUID`
 	* comment - String - Inhalt des Kommentars
-* `POST /infos/:infoUUID/rating` - AccessRestricted - Abgeben einer Bewertung der Info `:infoUUID` 
-	* rating - Integer (0-5) - Wert der Bewertung
+* `POST /infos/:infoUUID/rating` - AccessRestricted - Abgeben einer Bewertung der Info `:infoUUID`
+	* r1, r2, r3, r4, r5 - Integer (0-5) - Werte für verschiedene Parameter (bisher ohne Zuordnung)
+	* comment - String - Zusatzkommentar zur Bewertung
+* `PUT /infos/:infoUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Info
 
 ---
-### SOON TM
-* `GET /self/profile`
-* `GET /self/solutions`
-* `GET /self/tasks`
-* `GET /self/infos`
+### Nutzerprofile
+* `GET /self` - Kleines Inhaltsverzeichnis für die weitere Struktur
+* `GET /self/solutions` - Liefert alle Lösungen des aktuellen Users
+* `GET /self/tasks/created` - Liefert alle selbst erstellten Aufgaben des Users
+* `GET /self/tasks/sovled` - Liefert alle vom aktuellen User gelösten Aufgaben
+* `GET /self/infos` - Liefert alle Infos des aktuellen Users
+* `GET /self/points` - Liefert Punktekonto des aktuellen Users
 
 
 ---

@@ -33,9 +33,15 @@ router.get('/tasks/:taskUUID', helper.prefetchTask, auth.restricted, function(re
 router.get('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, function(req, res, next) {
 
   var task = req._task;
+  var user = req.user;
+
   task.getRating(function(err, rating) {
     if(err) return next(err);
-    res.json(rating);
+    user.getMyRatingFor(task.uuid, function(err, myrating) {
+      if(err) return next(err);
+      rating.myRating = myrating;
+      res.json(rating);
+    });
   });
 
 });
@@ -55,17 +61,29 @@ router.get('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, fu
 });
 
 // Fügt Rating hinzu
-router.post('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, function(req, res, next) {
+router.post('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
-  req.checkBody('rating', 'Bewertung fehlt').notEmpty();
-  req.checkBody('rating', 'Der Bewertungsparameter muss ein Ganzzahlwert sein').isInt();
+  req.checkBody('r1', 'Der Bewertungsparameter R1 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r2', 'Der Bewertungsparameter R2 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r3', 'Der Bewertungsparameter R3 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r4', 'Der Bewertungsparameter R4 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r5', 'Der Bewertungsparameter R5 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('comment', 'Der Bewertung muss noch ein Kommentar beiliegen').notEmpty();
   var errors = req.validationErrors();
   if(errors) {
     return next(errors);
   }
 
+  req.sanitizeBody('r1').toInt();
+  req.sanitizeBody('r2').toInt();
+  req.sanitizeBody('r3').toInt();
+  req.sanitizeBody('r4').toInt();
+  req.sanitizeBody('r5').toInt();
+
   var user = req.user;
-  user.rate(req.params.taskUUID, parseInt(req.body.rating), function(err, result) {
+  var config = req._config;
+
+  user.rate(req.params.taskUUID, req.body, config.ratePoints, function(err, result) {
     if(err) return next(err);
     res.status(201).json({success: true});
   });
@@ -118,7 +136,7 @@ router.get('/tasks/:taskUUID/solution', helper.prefetchTask, auth.restricted, fu
 });
 
 // Neue Lösung für Aufgabe
-router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, function(req, res, next) {
+router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
   req.checkBody('description', 'Inhalt der Lösung fehlt').notEmpty();
   var errors = req.validationErrors();
@@ -127,10 +145,24 @@ router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, 
   }
 
   var task = req._task;
-  Solution.create(req.body, task.uuid, req.user.uuid, function(err, solution) {
+  var config = req._config;
+  var user = req.user;
+
+  // überprüfe ob der Nutzer noch genug Punkte hat
+  user.hasPoints(config.solutionPoints, function(err, heDoes) {
     if(err) return next(err);
-    solution.addMetadata(API_VERSION);
-    res.json(solution);
+    if(!heDoes) {
+      err = new Error('Du hast nicht genug Punkte um eine Lösung abzugeben');
+      err.status = 409;
+      err.name = 'MissingPoints';
+      return next(err);
+    } else {
+      Solution.create(req.body, task.uuid, req.user.uuid, config.solutionPoints, function(err, solution) {
+        if(err) return next(err);
+        solution.addMetadata(API_VERSION);
+        res.json(solution);
+      });
+    }
   });
 
 });
@@ -143,6 +175,26 @@ router.get('/tasks/:taskUUID/target', helper.prefetchTask, auth.restricted, func
     if(err) return next(err);
     target.addMetadata(API_VERSION);
     res.json(target);
+  });
+
+});
+
+
+/**************************************************
+              ADMIN ONLY ROUTES
+**************************************************/
+
+// Toggled den Status der Ressource zu inaktiv/aktiv
+router.put('/tasks/:taskUUID/status', helper.prefetchTask, auth.adminOnly, function(req, res, next) {
+
+  var task = req._task;
+  task.toggle(function(err, result) {
+    if(err) return next(err);
+    Task.get(task.uuid, function(err, t) {
+      if(err) return next(err);
+      t.addMetadata(API_VERSION);
+      res.json(t);
+    });
   });
 
 });

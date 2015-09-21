@@ -23,6 +23,14 @@ router.post('/login', function(req, res, next) {
   User.findByUsername(req.body.username, function(err, user) {
     if(err) return next(err);
 
+    // ist Nutzeraccount deaktiviert?
+    if(!user.isActive()) {
+      err = new Error('Dieses Benutzerkonto wurde deaktiviert');
+      err.status = 401;
+      err.name = 'UserDeactivated';
+      return next(err);
+    }
+
     // Passwort überprüfen
     if(user.password !== req.body.password) {
       res.json({

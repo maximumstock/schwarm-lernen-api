@@ -75,7 +75,7 @@ Object.defineProperty(Solution.prototype, 'author', {
 Solution.get = function (uuid, callback) {
 
   var query = [
-    'MATCH (s:Solution {uuid: {uuid}})',
+    'MATCH (s:Solution {uuid: {uuid}})<-[:CREATED]-(u:User)',
     'RETURN s'
   ].join('\n');
 
@@ -130,8 +130,9 @@ Solution.getAll = function (callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} taskUUID UUID der Aufgaben-Node für die die Lösung gilt
  * @param {string} userUUID UUID des Users, der die Lösung angefertigt hat
+ * @param {integer} points Anzahl der Punkte die für das Erstellen verdient werden
  */
-Solution.create = function (properties, taskUUID, userUUID, callback) {
+Solution.create = function (properties, taskUUID, userUUID, points, callback) {
 
   // Validierung
   // `validate()` garantiert unter anderem:
@@ -148,12 +149,13 @@ Solution.create = function (properties, taskUUID, userUUID, callback) {
   var query = [
     'MATCH (a:Task {uuid: {task}}), (u:User {uuid: {author}})',
     'MERGE (a)<-[r1:SOLVES]-(s:Solution)<-[r2:CREATED]-(u)',
-    'ON CREATE SET s = {properties}',
+    'ON CREATE SET s = {properties}, r2.points = {points}',
     'return s'
   ].join('\n');
 
   var params = {
     properties: properties,
+    points: points,
     task: taskUUID,
     author: userUUID
   };
@@ -168,7 +170,7 @@ Solution.create = function (properties, taskUUID, userUUID, callback) {
     if (result.length === 0) {
       err = new Error('Die Aufgabe `' + taskUUID + '` existiert nicht');
       err.status = 404;
-      err.name = 'TaskOrUserNotFound';
+      err.name = 'TaskNotFound';
       return callback(err);
     }
 

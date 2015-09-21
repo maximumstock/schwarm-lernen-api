@@ -496,6 +496,134 @@ User.prototype.getSolutionByTask = function(taskUUID, callback) {
 };
 
 /**
+ * @function Liefert alle Lösungen des Users
+ */
+User.prototype.getSolutions = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(s:Solution)',
+    'RETURN s'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    var solutions = result.map(function(i) {
+      return new Solution(i.s);
+    });
+    callback(null, solutions);
+  });
+
+};
+
+/**
+ * @function Liefert Aufschlüsselung über das Punktekonto des Nutzers
+ * @returns Ein Objekt mit den Punkten für Aufgaben, Lösungen, Infos
+ */
+User.prototype.getPoints = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})',
+    'OPTIONAL MATCH (u)-[r:CREATED]-(n)',
+    'OPTIONAL MATCH (u)-[r2:RATES]-(n2)',
+    'OPTIONAL MATCH (u)-[:CREATED]->(n3)<-[r3:RATES]-(u2:User)',
+    'RETURN r,n,r2,r3'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+
+    var points = {
+      tasks: 0,
+      solutions: 0, // Summe aller Punkte die zum Einstellen von Lösungen ausgegeben wurde
+      infos: 0,
+      ratings: 0,
+      total: 0
+    };
+
+    result.forEach(function(i) {
+
+      // Punkte kommen entweder vom Erstellen von Content -> i.r2 ist NULL
+      if(i.n && i.r) {
+        var labels = i.n.labels;
+        var p = parseInt(i.r.properties.points || 0);
+        points.total += p;
+
+        if(labels.indexOf('Task') > -1) {
+          points.tasks += p;
+        } else if(labels.indexOf('Solution') > -1) {
+          points.solutions += p;
+        } else if(labels.indexOf('Info') > -1){
+          points.infos += p;
+        }
+
+        // oder von den Bewertungen anderer des eigenen Contents
+        if(i.r3) {
+          var rating = i.r3.properties;
+          var avg = (rating.r1 + rating.r2 + rating.r3 + rating.r4 + rating.r5) / 5;
+          points.total += avg;
+
+          if(labels.indexOf('Task') > -1) {
+            points.tasks += avg;
+          } else if(labels.indexOf('Solution') > -1) {
+            points.solutions += avg;
+          } else if(labels.indexOf('Info') > -1){
+            points.infos += avg;
+          }
+
+        }
+      }
+
+
+      // oder Punkte kommen von gegebenen Bewertungen -> dann ist i.r & i.n NULL
+      if(i.r2) {
+        var ratePoints = parseInt(i.r2.properties.points || 0);
+        points.ratings += ratePoints;
+        points.total += ratePoints;
+      }
+
+    });
+
+    callback(null, points);
+  });
+
+};
+
+/**
+ * @function Helferfunktion die überprüft ob der User noch {points} Punkte hat
+ * @param {integer} amount Anzahl der Punkte die der User mindestens haben soll
+ */
+User.prototype.hasPoints = function(amount, cb) {
+
+  this.getPoints(function(err, points) {
+    if(err) return cb(err);
+    if(points.total < amount) {
+      return cb(null, false);
+    } else {
+      return cb(null, true);
+    }
+  });
+
+};
+
+/**
  * @function Überprüft ob der User die Node {id} erstellt hat oder nicht
  * @param {string} nodeUUID UUID der zu überprüfenden Node
  * @returns true/false
@@ -528,16 +656,19 @@ User.prototype.hasCreated = function(nodeUUID, callback) {
  * @function Bewertet die Node {nodeUUID} mit der Bewertung {rating}
  * Falls bereits eine Bewertung besteht wird sie überschrieben
  * @param {string} nodeUUID UUID der zu bewertenden Node
- * @param {int} rating Bewertung als Integer (0-5)
+ * @param {object} rating Objekt mit mehreren Bewertungen (momentan r1-r5) als Integer (1-5)
+ * @param {integer} points Anzahl der Punkte die der Ersteller der Bewertung erhalten soll
  */
-User.prototype.rate = function(nodeUUID, rating, callback) {
+User.prototype.rate = function(nodeUUID, rating, points, callback) {
 
   var self = this;
 
-  if(rating < 0 || rating > 5) {
-    var err = new Error('Die Bewertung muss zwischen 0 und 5 liegen');
-    err.status = 409;
-    return callback(err);
+  for(var k in rating) {
+    if(rating[k] < 1 || rating[k] > 5) {
+      var err = new Error('Die Bewertung muss zwischen 1 und 5 liegen');
+      err.status = 409;
+      return callback(err);
+    }
   }
 
   // Überprüfe ob der Nutzer die Node selbst erstellt hat, falls ja sollte er sie nicht bewerten können
@@ -550,18 +681,20 @@ User.prototype.rate = function(nodeUUID, rating, callback) {
       err.name = 'CheekyUser';
       return callback(err);
     } else {
-      // User darf bewerten
 
+      // User darf bewerten
       var query = [
-        'MERGE (u:User {uuid: {userUUID}})-[r:RATES]->(n {uuid: {nodeUUID}})',
-        'ON CREATE SET r.rating = {rating}',
-        'ON MATCH SET r.rating = {rating}'
+        'MATCH (u:User {uuid: {userUUID}}), (n {uuid: {nodeUUID}})',
+        'MERGE (u)-[r:RATES]->(n)',
+        'ON CREATE SET r = {rating}, r.points = {points}',
+        'ON MATCH SET r = {rating}'
       ].join('\n');
 
       var params = {
         nodeUUID: nodeUUID,
         userUUID: self.uuid,
-        rating: rating
+        rating: rating,
+        points: points
       };
 
       db.cypher({
@@ -576,6 +709,39 @@ User.prototype.rate = function(nodeUUID, rating, callback) {
 };
 
 /**
+ * @function Liefert die Bewertung des Users für eine Node {nodeUUID} zurück
+ * @param {string} nodeUUID UUID der Node für die die Bewertung des Nutzers gesucht werden soll
+ */
+User.prototype.getMyRatingFor = function(nodeUUID, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})-[r:RATES]->(n {uuid: {nodeUUID}})',
+    'RETURN r'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid,
+    nodeUUID: nodeUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    if(result.length === 0) {
+      return cb(null, null);
+    } else {
+      return cb(null, result[0].r.properties);
+    }
+  });
+
+};
+
+
+/**
  * @function Fügt Metadaten hinzu
  * @param {string} apiVersion Ein vorangestellter String zur Vervollständigung der URL
  */
@@ -588,11 +754,6 @@ User.prototype.addMetadata = function (apiVersion) {
 
   var links = {};
   links.ref = base;
-  links.ownTasks = base + '/tasks/created';
-  links.solvedTasks = base + '/tasks/solved';
-  links.infos = base + '/infos';
-  links.solutions = base + '/solutions';
-
   this.links = links;
 
 };

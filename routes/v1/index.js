@@ -18,6 +18,7 @@ var tasks = require('./tasks');
 var solutions = require('./solutions');
 var infos = require('./infos');
 var comments = require('./comments');
+var profiles = require('./profiles');
 
 // API Index Route
 router.get('/', function(req, res, next) {
@@ -45,5 +46,6 @@ router.use('/', tasks);
 router.use('/', solutions);
 router.use('/', infos);
 router.use('/', comments);
+router.use('/', profiles);
 
 module.exports = router;

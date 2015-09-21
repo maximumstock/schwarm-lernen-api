@@ -31,9 +31,15 @@ router.get('/solutions/:solutionUUID', helper.prefetchSolution, auth.restricted,
 router.get('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
   var solution = req._solution;
+  var user = req.user;
+
   solution.getRating(function(err, rating) {
     if(err) return next(err);
-    res.json(rating);
+    user.getMyRatingFor(solution.uuid, function(err, myrating) {
+      if(err) return next(err);
+      rating.myRating = myrating;
+      res.json(rating);
+    });
   });
 
 });
@@ -53,17 +59,29 @@ router.get('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.re
 });
 
 // Fügt Rating hinzu
-router.post('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+router.post('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
-  req.checkBody('rating', 'Bewertung fehlt').notEmpty();
-  req.checkBody('rating', 'Der Bewertungsparameter muss ein Ganzzahlwert sein').isInt();
+  req.checkBody('r1', 'Der Bewertungsparameter R1 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r2', 'Der Bewertungsparameter R2 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r3', 'Der Bewertungsparameter R3 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r4', 'Der Bewertungsparameter R4 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('r5', 'Der Bewertungsparameter R5 muss ein Ganzzahlwert sein').notEmpty().isInt();
+  req.checkBody('comment', 'Der Bewertung muss noch ein Kommentar beiliegen').notEmpty();
   var errors = req.validationErrors();
   if(errors) {
     return next(errors);
   }
 
+  req.sanitizeBody('r1').toInt();
+  req.sanitizeBody('r2').toInt();
+  req.sanitizeBody('r3').toInt();
+  req.sanitizeBody('r4').toInt();
+  req.sanitizeBody('r5').toInt();
+
   var user = req.user;
-  user.rate(req.params.solutionUUID, parseInt(req.body.rating), function(err, result) {
+  var config = req._config;
+
+  user.rate(req.params.solutionUUID, req.body, config.ratePoints, function(err, result) {
     if(err) return next(err);
     res.status(201).json({success: true});
   });
@@ -95,6 +113,26 @@ router.get('/solutions/:solutionUUID/task', helper.prefetchSolution, auth.restri
     if(err) return next(err);
     target.addMetadata(API_VERSION);
     res.json(target);
+  });
+
+});
+
+
+/**************************************************
+              ADMIN ONLY ROUTES
+**************************************************/
+
+// Toggled den Status der Ressource zu inaktiv/aktiv
+router.put('/solutions/:solutionUUID/status', helper.prefetchSolution, auth.adminOnly, function(req, res, next) {
+
+  var solution = req._solution;
+  solution.toggle(function(err, result) {
+    if(err) return next(err);
+    Solution.get(solution.uuid, function(err, s) {
+      if(err) return next(err);
+      s.addMetadata(API_VERSION);
+      res.json(s);
+    });
   });
 
 });

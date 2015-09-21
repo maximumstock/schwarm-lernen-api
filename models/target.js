@@ -679,7 +679,7 @@ Target.prototype.getParentDegree = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF]->(d:Degree)',
+    'MATCH (t:Target {uuid: {uuid}})-[r]->(d:Degree)',
     'RETURN d'
   ].join('\n');
 
@@ -691,7 +691,8 @@ Target.prototype.getParentDegree = function(callback) {
     query: query,
     params: params
   }, function(err, result) {
-    callback(err, new Degree(result[0].d));
+    if(err) return callback(err);
+    callback(null, new Degree(result[0].d));
   });
 
 };

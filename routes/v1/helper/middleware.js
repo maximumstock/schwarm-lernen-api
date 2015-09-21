@@ -19,13 +19,6 @@ var Comment = require('../../../models/comment');
  */
 exports.prefetchDegree = function(req, res, next) {
 
-  // falls :degreeUUID fehlt-> nicht weiterleiten
-  if(!req.params.degreeUUID) {
-    // falsches URL Schema bzw. falsche Anwendung dieser Middleware
-    var err = new Error('prefetchDegree Middleware kann keine :degreeUUID auflösen');
-    return next(err);
-  }
-
   Degree.get(req.params.degreeUUID, function(err, degree) {
     if(err) return next(err);
     req._degree = degree;
@@ -42,13 +35,6 @@ exports.prefetchDegree = function(req, res, next) {
  */
 exports.prefetchTarget = function(req, res, next) {
 
-  // falls :targetUUID fehlt -> nicht weiterleiten
-  if(!req.params.targetUUID) {
-    // falsches URL Schema bzw. falsche Anwendung dieser Middleware
-    var err = new Error('prefetchTarget Middleware kann keine :targetUUID auflösen');
-    return next(err);
-  }
-
   Target.get(req.params.targetUUID, function(err, target) {
     if(err) return next(err);
     req._target = target;
@@ -60,13 +46,6 @@ exports.prefetchTarget = function(req, res, next) {
 
 // siehe exports.prefetchTarget, jedoch für Aufgaben
 exports.prefetchTask = function(req, res, next) {
-
-  // falls taskUUID fehlt -> nicht weiterleiten
-  if(!req.params.taskUUID) {
-    // falsches URL Schema bzw. falsche Anwendung dieser Middleware
-    var err = new Error('prefetchTask Middleware kann keine :taskUUID auflösen');
-    return next(err);
-  }
 
   Task.get(req.params.taskUUID, function(err, task) {
     if(err) return next(err);
@@ -80,13 +59,6 @@ exports.prefetchTask = function(req, res, next) {
 // siehe exports.prefetchTarget, jedoch für Lösungen
 exports.prefetchSolution = function(req, res, next) {
 
-  // falls solutionUUID fehlt -> nicht weiterleiten
-  if(!req.params.solutionUUID) {
-    // falsches URL Schema bzw. falsche Anwendung dieser Middleware
-    var err = new Error('prefetchTask Middleware kann keine :solutionUUID auflösen');
-    return next(err);
-  }
-
   Solution.get(req.params.solutionUUID, function(err, solution) {
     if(err) return next(err);
     req._solution = solution;
@@ -98,13 +70,6 @@ exports.prefetchSolution = function(req, res, next) {
 
 // siehe exports.prefetchTarget, jedoch für Infos
 exports.prefetchInfo = function(req, res, next) {
-
-  // falls infoUUID fehlt -> nicht weiterleiten
-  if(!req.params.infoUUID) {
-    // falsches URL Schema bzw. falsche Anwendung dieser Middleware
-    var err = new Error('prefetchTask Middleware kann keine :infoUUID auflösen');
-    return next(err);
-  }
 
   Info.get(req.params.infoUUID, function(err, info) {
     if(err) return next(err);
@@ -118,18 +83,33 @@ exports.prefetchInfo = function(req, res, next) {
 // siehe exports.prefetchTarget, jedoch für Kommentare
 exports.prefetchComment = function(req, res, next) {
 
-  // falls commentUUID fehlt -> nicht weiterleiten
-  if(!req.params.commentUUID) {
-    // falsches URL Schema bzw. falsche Anwendung dieser Middleware
-    var err = new Error('prefetchTask Middleware kann keine :commentUUID auflösen');
-    return next(err);
-  }
-
   Comment.get(req.params.commentUUID, function(err, comment) {
     if(err) return next(err);
     req._comment = comment;
     req._checker = comment;
     next();
+  });
+
+};
+
+// holt das config objekt vom req._checker objekt
+// sollte nur nach einer der oberen prefetch-Middleware-Funktionen genutzt werden
+exports.prefetchConfig = function(req, res, next) {
+
+  if(!req._checker) {
+    var err = new Error('exports.prefetchConfig-Middleware sollte nicht standalone verwendet werden');
+    err.status = 500;
+    err.name = 'N00bAdmin';
+    return next(err);
+  }
+
+  req._checker.getParentDegree(function(err, degree) {
+    if(err) return next(err);
+    degree.getConfig(function(err, config) {
+      if(err) return next(err);
+      req._config = config;
+      next();
+    });
   });
 
 };

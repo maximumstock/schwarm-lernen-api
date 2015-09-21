@@ -1,4 +1,4 @@
-'use strict';
+ 'use strict';
 
 /**
  * @file Enthält das Datenmodell und die Businessregeln für Infos.
@@ -75,7 +75,7 @@ Object.defineProperty(Info.prototype, 'author', {
 Info.get = function (uuid, callback) {
 
   var query = [
-    'MATCH (i:Info {uuid: {uuid}})',
+    'MATCH (i:Info {uuid: {uuid}})<-[:CREATED]-(u:User)',
     'RETURN i'
   ].join('\n');
 
@@ -95,6 +95,7 @@ Info.get = function (uuid, callback) {
       return callback(err);
     }
     // erstelle neue Info-Instanz und gib diese zurück
+    result[0].i.properties.points = result[0].points;
     var i = new Info(result[0].i);
     callback(null, i);
   });
@@ -136,9 +137,9 @@ Info.getAll = function (callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} targetUUID UUID der Lernziel-Node für die die Info gilt
  * @param {string} userUUID UUID des Users, der die Info angefertigt hat
- * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
+ * @param {integer} points Anzahl der Punkte die für das Erstellen verdient werden
  */
-Info.create = function (properties, targetUUID, userUUID, callback) {
+Info.create = function (properties, targetUUID, userUUID, points, callback) {
 
   // Validierung
   // `validate()` garantiert unter anderem:
@@ -155,14 +156,15 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
   var query = [
     'MATCH (a:Target {uuid: {target}}), (u:User {uuid: {author}})',
     'CREATE (i:Info {properties})',
-    'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(i)<-[r2:CREATED]-(u)',
+    'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(i)<-[r2:CREATED {points: {points}}]-(u)',
     'return i'
   ].join('\n');
 
   var params = {
     properties: properties,
     target: targetUUID,
-    author: userUUID
+    author: userUUID,
+    points: points
   };
 
   db.cypher({
@@ -176,7 +178,7 @@ Info.create = function (properties, targetUUID, userUUID, callback) {
     if (result.length === 0) {
       err = new Error('Das Target `' + targetUUID + '` existiert nicht');
       err.status = 404;
-      err.name = 'TargetOrUserNotFound';
+      err.name = 'TargetNotFound';
 
       return callback(err);
     }

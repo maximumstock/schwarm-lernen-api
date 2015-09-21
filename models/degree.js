@@ -23,6 +23,7 @@ var moment = require('moment');
 var Node = require('./node');
 var Target = require('./target');
 var User = require('./user');
+var Config = require('./config');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -38,11 +39,6 @@ Degree.VALIDATION_INFO = {
     required: true,
     minLength: 3,
     message: 'Muss einen Namen haben.'
-  },
-  entryKey: {
-    required: true,
-    minLength: 6,
-    message: 'Muss einen Eintragungsschlüssel haben.'
   }
 };
 
@@ -52,13 +48,6 @@ Degree.VALIDATION_INFO = {
 Object.defineProperty(Degree.prototype, 'name', {
   get: function () {
     return this.properties.name;
-  }
-});
-
-// Propertydefinition für den Eintragungsschlüssel des Studiengangs
-Object.defineProperty(Degree.prototype, 'entryKey', {
-  get: function () {
-    return this.properties.entryKey;
   }
 });
 
@@ -142,7 +131,7 @@ Degree.create = function (properties, callback) {
   properties.createdAt = parseInt(moment().format('X'));
 
   var query = [
-    'Create (d:Degree {properties})',
+    'CREATE (d:Degree {properties})',
     'RETURN d'
   ].join('\n');
 
@@ -194,7 +183,8 @@ Degree.prototype.del = function (callback) {
 
   var query = [
     'MATCH (d:Degree {uuid: {uuid}})',
-    'DELETE d'
+    'OPTIONAL MATCH (d)<-[r:BELONGS_TO]-(c:Config)',
+    'DELETE d,r,c'
   ].join('\n');
 
   var params = {
@@ -348,6 +338,32 @@ Degree.prototype.getTargets = function (level, callback) {
 // };
 
 /**
+ * @function Gibt die Konfiguration eines Studiengangs zurück
+ */
+Degree.prototype.getConfig = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (d:Degree {uuid: {degreeUUID}})<-[:BELONGS_TO]-(c:Config)',
+    'RETURN c'
+  ].join('\n');
+
+  var params = {
+    degreeUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    callback(null, new Config(result[0].c));
+  });
+
+};
+
+/**
  * @function Gibt alle User zurück die auf diesen Studiengang zugreifen können
  */
 Degree.prototype.getUsers = function (callback) {
@@ -488,6 +504,7 @@ Degree.prototype.addMetadata = function (apiVersion) {
   links.ref = base;
   links.targets = base + '/targets';
   links.users = base + '/users';
+  links.config = base + '/config';
   this.links = links;
 
 };

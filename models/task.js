@@ -74,7 +74,7 @@ Object.defineProperty(Task.prototype, 'author', {
 Task.get = function(uuid, callback) {
 
   var query = [
-    'MATCH (a:Task {uuid: {uuid}})',
+    'MATCH (a:Task {uuid: {uuid}})<-[:CREATED]-(u:User)',
     'RETURN a'
   ].join('\n');
 
@@ -95,6 +95,7 @@ Task.get = function(uuid, callback) {
     }
     // erstelle neue Aufgabe-Instanz und gib diese zurück
     var a = new Task(result[0].a);
+
     callback(null, a);
   });
 
@@ -132,9 +133,9 @@ Task.getAll = function(callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} parentUUID UUID der Parent-Node, an die die Aufgabe gehängt werden soll
  * @param {string} authorUUID UUID des Autors der Aufgabe
- * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
+ * @param {integer} points Anzahl der Punkte die für das Erstellen verdient werden
  */
-Task.create = function(properties, parentUUID, authorUUID, callback) {
+Task.create = function(properties, parentUUID, authorUUID, points, callback) {
 
   // Validierung
   try {
@@ -150,14 +151,15 @@ Task.create = function(properties, parentUUID, authorUUID, callback) {
   var query = [
     'MATCH (dt:Target {uuid: {parent}}), (u:User {uuid: {author}})',
     'CREATE (a:Task {properties})',
-    'CREATE UNIQUE (u)-[:CREATED]->(a)-[r:BELONGS_TO]->(dt)',
+    'CREATE UNIQUE (u)-[:CREATED {points: {points}}]->(a)-[r:BELONGS_TO]->(dt)',
     'return a'
   ].join('\n');
 
   var params = {
     properties: properties,
     parent: parentUUID,
-    author: authorUUID
+    author: authorUUID,
+    points: points
   };
 
   db.cypher({
@@ -171,7 +173,7 @@ Task.create = function(properties, parentUUID, authorUUID, callback) {
     if(result.length === 0) {
       err = new Error('Das Lernziel als Parent mit der UUID `' + parentUUID + '` existiert nicht');
       err.status = 404;
-      err.name = 'ParentNotFound';
+      err.name = 'TargetNotFound';
 
       return callback(err);
     }

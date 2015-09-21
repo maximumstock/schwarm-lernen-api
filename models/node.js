@@ -23,6 +23,8 @@ var Node = module.exports = function Node(_node) {
   // Dadurch werden alle Labels und Properties aus der Datenbank in diesem Objekt gespeichert
   this.labels = _node.labels;
   this.properties = _node.properties;
+
+  this.properties.status = this.isActive() ? 'active' : 'inactive';
 };
 
 var Comment = require('./comment');
@@ -71,7 +73,7 @@ Node.prototype.getComments = function(callback) {
 
 
 /**
- * @function Liefert alle Kommentare einer Node, falls welche bestehen
+ * @function Liefert alle Bewertungen einer Node, falls welche bestehen
  */
 Node.prototype.getRating = function(callback) {
 
@@ -79,7 +81,7 @@ Node.prototype.getRating = function(callback) {
 
   var query = [
     'MATCH (n {uuid: {selfUUID}})<-[r:RATES]-(u:User)',
-    'RETURN avg(r.rating) as rating, length(collect(r)) as votes'
+    'RETURN r, u'
   ].join('\n');
 
   var params = {
@@ -91,11 +93,114 @@ Node.prototype.getRating = function(callback) {
     params: params
   }, function(err, result) {
     if(err) return callback(err);
+
+    var ratings = result.map(function(i) {
+      return {
+        r1: i.r.properties.r1,
+        r2: i.r.properties.r2,
+        r3: i.r.properties.r3,
+        r4: i.r.properties.r4,
+        r5: i.r.properties.r5,
+        comment: i.r.properties.comment,
+        author: i.u.properties.username,
+        authorUUID: i.u.properties.uuid
+      };
+    });
+
     callback(null, {
-      rating: result[0].rating,
-      votes: result[0].votes
+      ratings: ratings,
+      votes: result.length
     });
   });
+
+};
+
+/**
+ * @function Helferfunktion die überprüft ob eine Node eine Aufgabe, Lösunge oder Information ist
+ */
+Node.prototype.isToggable = function() {
+
+  return this.labels.indexOf('Task') > -1 || this.labels.indexOf('Solution') > -1 || this.labels.indexOf('Info') > -1;
+
+};
+
+/**
+ * @function Helferfunktion die überprüft ob eine Node aktiv ist
+ */
+Node.prototype.isActive = function() {
+
+  return this.labels.indexOf('Inactive') === -1;
+
+};
+
+/**
+ * @function Helferfunktion die die Node inaktive toggled indem sie das Label `Inactive` hinzufügt
+ */
+Node.prototype.toggleInactive = function(cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (n {uuid: {uuid}})',
+    'SET n:Inactive'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    cb(err, null);
+  });
+
+};
+
+/**
+ * @function Helferfunktion die die Node aktiv toggled indem sie das Label `Inactive` entfernt
+ */
+Node.prototype.toggleActive = function(cb) {
+
+ var self = this;
+
+ var query = [
+   'MATCH (n {uuid: {uuid}})',
+   'REMOVE n:Inactive'
+ ].join('\n');
+
+ var params = {
+   uuid: self.uuid
+ };
+
+ db.cypher({
+   query: query,
+   params: params
+ }, function(err, result) {
+   cb(err, null);
+ });
+
+};
+
+/**
+ * @function Toggled den Aktivitätsstatus der Node, falls es sich um Aufgaben, Lösungen oder Informationen handelt
+ */
+Node.prototype.toggle = function(callback) {
+
+  // Falls es keine Info, Lösung oder Aufgabe ist, einfach das aktuelle Objekt zurückgeben
+  if(!this.isToggable()) {
+    return callback(null, this);
+  }
+
+  // Status togglen
+  if(this.isActive()) {
+    // inaktiv togglen
+    this.toggleInactive(callback);
+  } else {
+    // aktiv togglen
+    this.toggleActive(callback);
+  }
 
 };
 

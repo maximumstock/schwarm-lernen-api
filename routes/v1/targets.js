@@ -58,7 +58,7 @@ router.get('/targets/:targetUUID/parent', helper.prefetchTarget, auth.restricted
 });
 
 // Fügt eine neue Info hinzu
-router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted, function(req, res, next) {
+router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
   req.checkBody('description', 'Inhalt der neuen Info fehlt').notEmpty();
   var errors = req.validationErrors();
@@ -67,7 +67,9 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
   }
 
   var target = req._target;
-  Info.create(req.body, target.uuid, req.user.uuid, function(err, info) {
+  var config = req._config;
+
+  Info.create(req.body, target.uuid, req.user.uuid, config.infoPoints, function(err, info) {
     if(err) return next(err);
     info.addMetadata(API_VERSION);
     res.json(info);
@@ -76,7 +78,7 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
 });
 
 // Fügt eine neue Aufgabe hinzu
-router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted, function(req, res, next) {
+router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
   req.checkBody('description', 'Inhalt der neuen Aufgabe fehlt').notEmpty();
   var errors = req.validationErrors();
@@ -85,7 +87,9 @@ router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted
   }
 
   var target = req._target;
-  Task.create(req.body, target.uuid, req.user.uuid, function(err, task) {
+  var config = req._config;
+
+  Task.create(req.body, target.uuid, req.user.uuid, config.taskPoints, function(err, task) {
     if(err) return next(err);
     task.addMetadata(API_VERSION);
     res.json(task);

@@ -87,6 +87,13 @@ exports.restricted = function(req, res, next) {
     return next();
   }
 
+  if(!req.user.isActive()) {
+    var err = new Error('Dieses Benutzerkonto wurde deaktiviert');
+    err.status = 401;
+    err.name = 'UserDeactived';
+    return next(err);
+  }
+
   var user = req.user;
   var checker = req._checker;
 
