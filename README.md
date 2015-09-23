@@ -41,7 +41,7 @@ nicht zur Erfüllung von Arbeitspaketen oder dem Gesamtkontostand eines Nutzers 
 
 ### Punktekonzept
 Jeder Benutzer sammelt beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch für das Bewerten von fremden Inhalten Punkte.
-Die Konfiguration des jeweiligen Studiengangs bestimmt wie viele Punkte für die einzelnen Aktionen verdient werden können.
+Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte für die einzelnen Aktionen verdient und bezahlt werden.
 
 ### Bewertungskonzept
 Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet werden. Für das Bewerten von Inhalten bekommen sowohl die Bewertenden als auch die Bewerteten Nutzer Punkte. Siehe `Degrees/config` für weitere Informationen.
@@ -53,22 +53,31 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 * `GET /degrees/:degreeUUID/users` - AccessRestricted - Alle User die Zugriff auf den Studiengang `:degreeUUID` haben
 * `GET /degrees/:degreeUUID/config` - AccessRestricted - Die Konfiguration des Studiengangs
 * `POST /degrees` - AdminOnly - Neuen Studiengang erstellen
-	* name - String - Name des neuen Studiengangs
+	* name - String, alphanumerisch - Name des neuen Studiengangs
+	* Eine Standardkonfiguration wird hierbei erstellt: siehe [hier](#defaultconfig)
 * `POST /degrees/:degreeUUID/targets` - AdminOnly - Ein neues Lernziel an den Studiengang `:degreeUUID` hängen
 	* name - String - Name des neuen Lernziels
-* `POST /degrees/:degreeUUID/users` - AdminOnly - Generierung von Username-Passwort-Kombinationen, die Zugriff auf den Studiengang `:degreeUUID` haben
+* `PUT /degrees/:degreeUUID/users` - AdminOnly - Generierung von Username-Passwort-Kombinationen, die Zugriff auf den Studiengang `:degreeUUID` haben
 	* amount - Integer - Anzahl der zu generierenden Accounts
 * `PUT /degrees/:degreeUUID` - AdminOnly - Studiengang mit der ID `:degreeUUID` aktualisieren
 * `PUT /degrees/:degreeUUID/config` - AdminOnly - Konfiguration des Studiengangs `:degreeUUID` aktualisieren
-	* solutionShare - Integer - Prozentwert die Lösungen in einem Arbeitspaket ausmachen sollen
-	* infoShare - Integer - Prozentwert die Infos in einem Arbeitspaket ausmachen sollen
-	* taskShare - Integer - Prozentwert die Aufgaben in einem Arbeitspaket ausmachen sollen
-	* solutionPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Lösung erhalten soll
-	* infoPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Info erhalten soll
-	* taskPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Aufgabe erhalten soll
-	* ratePoints - Integer - Anzahl der Punkte die jemand für das Bewerten von fremden Inhalten erhalten soll
 * `DELETE /degrees/:degreeUUID` - AdminOnly - Studiengang mit der ID `:degreeUUID` löschen
 
+* <a name="defaultconfig">Standardkonfiguration</a>:
+	* packageSize - Integer - Gesamtgröße für neue Arbeitspakete - Default: 10
+	* solutionShare - Integer - Prozentwert die Lösungen in einem Arbeitspaket ausmachen sollen - Default: 0%
+	* infoShare - Integer - Prozentwert die Infos in einem Arbeitspaket ausmachen sollen - Default: 35%
+	* taskShare - Integer - Prozentwert die Aufgaben in einem Arbeitspaket ausmachen sollen - Default: 50%
+	* rateShare - Integer - Prozentwert die Bewertungen in einem Arbeitspaket ausmachen sollen - Default: 15%
+	* solutionPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Lösung erhalten soll - Default: 0
+	* infoPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Info erhalten soll - Default: 5
+	* taskPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Aufgabe erhalten soll - Default: 7
+	* ratePoints - Integer - Anzahl der Punkte die jemand für das Bewerten von fremden Inhalten erhalten soll - Default: 1
+	* solutionCost - Integer - Anzahl der Punkte die das Einstellen einer Lösung kosten soll - Default: 10
+	* infoCost - Integer - Anzahl der Punkte die das Einstellen einer Info kosten soll - Default: 0
+	* taskCost - Integer - Anzahl der Punkte die das Einstellen einer Aufgabe kosten soll - Default: 0
+	* rateCost - Integer - Anzahl der Punkte die das Bewerten von Inhalten kosten soll - Default: 0
+	* rateMultiplier - Integer - Multiplikator mit dem die durchschnittliche Bewertung von Inhalten verrechnet wird. Das Produkt wird auf die Gesamtpunktzahl der A/L/I addiert. - Default: 1
 
 ---
 ### Lernziele/Targets
@@ -136,7 +145,6 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 * `GET /self/infos` - Liefert alle Infos des aktuellen Users
 * `GET /self/points` - Liefert Punktekonto des aktuellen Users
 
-
 ---
 
 ## Fehler
@@ -144,7 +152,7 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 
 	{
 	    message: "Eine Klartextnachricht, die den Fehlerumstand beschreibt",
-		error: {
+			error: {
 	        name: "StudiengangNotFound", // interner Name
 	        status: 404 // HTTP-Status
 	    }
@@ -156,8 +164,3 @@ Als HTTP-Statusmeldungen werden verwendet:
 - **404** (Not Found), falls spezifische Ressource nicht gefunden wurde
 - **409** (Conflict), falls eine Ressource erstellt werden soll, die bereits existiert oder eine Ressource nicht gelöscht werden konnte
 - **500** (Internal), falls es einen internen Serverfehler gibt
-
-## Routen
-Im Folgenden werden die einzelnen API-Endpunkte beschrieben.
-- Bei allgemeinen Routen wie `/degrees`: **Properties**, **Labels**, **Ref** pro Element
-- Bei spezifischen Routen wie `/degrees/{id}`: **Properties**, **Labels**, **Ref**, **Relationsebene darüber**, **Relationsebene darunter** (falls verfügbar)

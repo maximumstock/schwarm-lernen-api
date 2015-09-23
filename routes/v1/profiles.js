@@ -99,6 +99,31 @@ router.get('/self/points', function(req, res, next) {
 
 });
 
+// Die aktuelle Arbeitspaketsituation zurückliefern
+router.get('/self/package', function(req, res, next) {
+
+  var user = req.user;
+  res.json({
+    tasks: {
+      done: user.tasksDone,
+      todo: user.tasksToDo
+    },
+    infos: {
+      done: user.infosDone,
+      todo: user.infosToDo
+    },
+    solutions: {
+      done: user.solutionsDone,
+      todo: user.solutionsToDo
+    },
+    ratings: {
+      done: user.ratingsDone,
+      todo: user.ratingsToDo
+    }
+  });
+
+});
+
 
 
 module.exports = router;

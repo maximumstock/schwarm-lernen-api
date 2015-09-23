@@ -15,6 +15,10 @@ var Info = require('../../models/info');
 var Task = require('../../models/task');
 var Comment = require('../../models/comment');
 var Solution = require('../../models/solution');
+var Rating = require('../../models/rating');
+
+var indicative = require('indicative');
+var validator = new indicative();
 
 var API_VERSION = config.HOST_URL + '/api/v1';
 
@@ -63,30 +67,52 @@ router.get('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, fu
 // Fügt Rating hinzu
 router.post('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
-  req.checkBody('r1', 'Der Bewertungsparameter R1 muss ein Ganzzahlwert sein').notEmpty().isInt();
-  req.checkBody('r2', 'Der Bewertungsparameter R2 muss ein Ganzzahlwert sein').notEmpty().isInt();
-  req.checkBody('r3', 'Der Bewertungsparameter R3 muss ein Ganzzahlwert sein').notEmpty().isInt();
-  req.checkBody('r4', 'Der Bewertungsparameter R4 muss ein Ganzzahlwert sein').notEmpty().isInt();
-  req.checkBody('r5', 'Der Bewertungsparameter R5 muss ein Ganzzahlwert sein').notEmpty().isInt();
-  req.checkBody('comment', 'Der Bewertung muss noch ein Kommentar beiliegen').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
+  validator
+    .validate(Rating.VALIDATION_RULES, req.body)
+    .then(function() {
 
-  req.sanitizeBody('r1').toInt();
-  req.sanitizeBody('r2').toInt();
-  req.sanitizeBody('r3').toInt();
-  req.sanitizeBody('r4').toInt();
-  req.sanitizeBody('r5').toInt();
+      var user = req.user;
+      var config = req._config;
 
-  var user = req.user;
-  var config = req._config;
+      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
+      // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
+      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+      // falls > 0: Einstellung möglich
+      if(user.ratingsToDo !== 0) {
 
-  user.rate(req.params.taskUUID, req.body, config.ratePoints, function(err, result) {
-    if(err) return next(err);
-    res.status(201).json({success: true});
-  });
+        // überprüfe ob der Nutzer noch genug Punkte hat
+        user.hasPoints(config.ratingCost, function(err, heDoes) {
+          if(err) return next(err);
+          if(!heDoes) {
+            err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
+            err.status = 409;
+            err.name = 'MissingPoints';
+            return next(err);
+          } else {
+
+            user.rate(req.params.taskUUID, req.body, config.ratePoints, config.rateCost, config.rateMultiplier, function(err, result) {
+              if(err) return next(err);
+              res.status(201).json({success: true});
+
+              user.didWorkOnPackage({tasks: 0, infos: 0, solutions: 0, ratings: 1}, config, function(err, result) {
+                if(err) console.error(err);
+              });
+            });
+          }
+        });
+
+      } else {
+        // Nutzer muss erst Paket abarbeiten
+        var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
+        err.status = 409;
+        err.name = 'WorkPackageNotDone';
+        res.json(err);
+      }
+
+    })
+    .catch(function(errors) {
+      return next(errors);
+    });
 
 });
 
@@ -111,6 +137,7 @@ router.post('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, f
 router.get('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, function(req, res, next) {
 
   var task = req._task;
+
   task.getSolutions(function(err, solutions) {
     if(err) return next(err);
     solutions.forEach(function(s) {
@@ -148,22 +175,39 @@ router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, 
   var config = req._config;
   var user = req.user;
 
-  // überprüfe ob der Nutzer noch genug Punkte hat
-  user.hasPoints(config.solutionPoints, function(err, heDoes) {
-    if(err) return next(err);
-    if(!heDoes) {
-      err = new Error('Du hast nicht genug Punkte um eine Lösung abzugeben');
-      err.status = 409;
-      err.name = 'MissingPoints';
-      return next(err);
-    } else {
-      Solution.create(req.body, task.uuid, req.user.uuid, config.solutionPoints, function(err, solution) {
-        if(err) return next(err);
-        solution.addMetadata(API_VERSION);
-        res.json(solution);
-      });
-    }
-  });
+  // überprüfe ob der Nutzer noch Aufgaben erstellen darf
+  // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
+  // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+  // falls > 0: Einstellung möglich
+  if(user.solutionsToDo !== 0) {
+
+    // überprüfe ob der Nutzer noch genug Punkte hat
+    user.hasPoints(config.solutionCost, function(err, heDoes) {
+      if(err) return next(err);
+      if(!heDoes) {
+        err = new Error('Du hast nicht genug Punkte um eine Lösung abzugeben');
+        err.status = 409;
+        err.name = 'MissingPoints';
+        return next(err);
+      } else {
+        Solution.create(req.body, task.uuid, req.user.uuid, config.solutionPoints, config.solutionCost, function(err, solution) {
+          if(err) return next(err);
+          solution.addMetadata(API_VERSION);
+          res.json(solution);
+          user.didWorkOnPackage({tasks: 0, infos: 0, solutions: 1, ratings: 0}, config, function(err, result) {
+            if(err) console.error(err);
+          });
+        });
+      }
+    });
+
+  } else {
+    // Nutzer muss erst Paket abarbeiten
+    var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Lösungen erstellen darfst');
+    err.status = 409;
+    err.name = 'WorkPackageNotDone';
+    res.json(err);
+  }
 
 });
 

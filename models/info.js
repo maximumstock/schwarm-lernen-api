@@ -15,8 +15,8 @@ var Info = module.exports = function Info(_node) {
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation');
-var errors = require('../lib/errors/errors');
+var indicative = require('indicative');
+var validator = new indicative();
 var dbhelper = require('../lib/db');
 var moment = require('moment');
 
@@ -34,12 +34,11 @@ Info.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Info-Nodes für Info#create
-Info.VALIDATION_INFO = {
-  description: {
-    required: true,
-    message: 'Muss eine Beschreibung haben'
-  }
+Info.VALIDATION_RULES = {
+  description: 'required|string'
 };
+
+Info.PROTECTED_ATTRIBUTES = ['createdAt', 'author', 'target'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -137,61 +136,65 @@ Info.getAll = function (callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} targetUUID UUID der Lernziel-Node für die die Info gilt
  * @param {string} userUUID UUID des Users, der die Info angefertigt hat
- * @param {integer} points Anzahl der Punkte die für das Erstellen verdient werden
+ * @param {integer} gainedPoints Anzahl der Punkte die für das Erstellen verdient werden
+ * @param {integer} spentPoints Anzahl der Punkte die das Erstellen kosten soll
  */
-Info.create = function (properties, targetUUID, userUUID, points, callback) {
+Info.create = function (properties, targetUUID, userUUID, gainedPoints, spentPoints, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem:
-  try {
-    properties = validate.validate(Info.VALIDATION_INFO, properties, true);
-  } catch (e) {
-    return callback(e);
-  }
+  validator
+    .validate(Info.VALIDATION_RULES, properties)
+    .then(function() {
 
-  properties.createdAt = parseInt(moment().format('X'));
-  properties.author = userUUID;
-  properties.target = targetUUID;
+      properties.createdAt = parseInt(moment().format('X'));
+      properties.author = userUUID;
+      properties.target = targetUUID;
 
-  var query = [
-    'MATCH (a:Target {uuid: {target}}), (u:User {uuid: {author}})',
-    'CREATE (i:Info {properties})',
-    'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(i)<-[r2:CREATED {points: {points}}]-(u)',
-    'return i'
-  ].join('\n');
+      var query = [
+        'MATCH (a:Target {uuid: {target}}), (u:User {uuid: {author}})',
+        'CREATE (i:Info {properties})',
+        'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(i)<-[r2:CREATED {gainedPoints: {gainedPoints}, spentPoints: {spentPoints}}]-(u)',
+        'return i'
+      ].join('\n');
 
-  var params = {
-    properties: properties,
-    target: targetUUID,
-    author: userUUID,
-    points: points
-  };
+      var params = {
+        properties: properties,
+        target: targetUUID,
+        author: userUUID,
+        gainedPoints: gainedPoints,
+        spentPoints: spentPoints
+      };
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
+      db.cypher({
+        query: query,
+        params: params
+      }, function (err, result) {
 
-    if (err) return callback(err);
+        if (err) return callback(err);
 
-    // falls es kein Ergebnis gibt wurde die neue Info nicht erstellt da es keinen passenden Autor oder Target gibt
-    if (result.length === 0) {
-      err = new Error('Das Target `' + targetUUID + '` existiert nicht');
-      err.status = 404;
-      err.name = 'TargetNotFound';
+        // falls es kein Ergebnis gibt wurde die neue Info nicht erstellt da es keinen passenden Autor oder Target gibt
+        if (result.length === 0) {
+          err = new Error('Das Target `' + targetUUID + '` existiert nicht');
+          err.status = 404;
+          err.name = 'TargetNotFound';
 
-      return callback(err);
-    }
+          return callback(err);
+        }
 
-    // hole gerade erstellte Info aus der Datenbank
-    dbhelper.getNodeByID(result[0].i._id, function (err, node) {
-      if (err) return callback(err);
-      // erstelle neue Infosinstanz und gib diese zurück
-      var i = new Info(node);
-      callback(null, i);
+        // hole gerade erstellte Info aus der Datenbank
+        dbhelper.getNodeByID(result[0].i._id, function (err, node) {
+          if (err) return callback(err);
+          // erstelle neue Infosinstanz und gib diese zurück
+          var i = new Info(node);
+          callback(null, i);
+        });
+
+      });
+
+    })
+    .catch(function(errors) {
+      return callback(errors);
     });
-
-  });
 
 };
 

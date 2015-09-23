@@ -15,8 +15,8 @@ var Task = module.exports = function Task(_node) {
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation');
-var errors = require('../lib/errors/errors');
+var indicative = require('indicative');
+var validator = new indicative();
 var moment = require('moment');
 
 var Node = require('./node');
@@ -35,12 +35,11 @@ Task.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Aufgabe-Nodes für Aufgabe#create
-Task.VALIDATION_INFO = {
-  description: {
-    required: true,
-    message: 'Muss eine Beschreibung haben.'
-  }
+Task.VALIDATION_RULES = {
+  description: 'required|string'
 };
+
+Task.PROTECTED_ATTRIBUTRES = ['createdAt', 'author', 'target'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -133,159 +132,70 @@ Task.getAll = function(callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} parentUUID UUID der Parent-Node, an die die Aufgabe gehängt werden soll
  * @param {string} authorUUID UUID des Autors der Aufgabe
- * @param {integer} points Anzahl der Punkte die für das Erstellen verdient werden
+ * @param {integer} gainedPoints Anzahl der Punkte die für das Erstellen verdient werden
+ * @param {integer} spentPoints Anzahl der Punkte die das Erstellen kosten soll
  */
-Task.create = function(properties, parentUUID, authorUUID, points, callback) {
+Task.create = function(properties, parentUUID, authorUUID, gainedPoints, spentPoints, callback) {
 
   // Validierung
-  try {
-    properties = validate.validate(Task.VALIDATION_INFO, properties, true);
-  } catch(e) {
-    return callback(e);
-  }
+  validator
+    .validate(Task.VALIDATION_RULES, properties)
+    .then(function() {
 
-  properties.createdAt = parseInt(moment().format('X'));
-  properties.author = authorUUID;
-  properties.target = parentUUID;
+      properties.createdAt = parseInt(moment().format('X'));
+      properties.author = authorUUID;
+      properties.target = parentUUID;
 
-  var query = [
-    'MATCH (dt:Target {uuid: {parent}}), (u:User {uuid: {author}})',
-    'CREATE (a:Task {properties})',
-    'CREATE UNIQUE (u)-[:CREATED {points: {points}}]->(a)-[r:BELONGS_TO]->(dt)',
-    'return a'
-  ].join('\n');
+      var query = [
+        'MATCH (dt:Target {uuid: {parent}}), (u:User {uuid: {author}})',
+        'CREATE (a:Task {properties})',
+        'CREATE UNIQUE (u)-[:CREATED {gainedPoints: {gainedPoints}, spentPoints: {spentPoints}}]->(a)-[r:BELONGS_TO]->(dt)',
+        'RETURN a'
+      ].join('\n');
 
-  var params = {
-    properties: properties,
-    parent: parentUUID,
-    author: authorUUID,
-    points: points
-  };
+      var params = {
+        properties: properties,
+        parent: parentUUID,
+        author: authorUUID,
+        gainedPoints: gainedPoints,
+        spentPoints: spentPoints
+      };
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
+      db.cypher({
+        query: query,
+        params: params
+      }, function(err, result) {
 
-    if (err) return callback(err);
+        if (err) return callback(err);
 
-    // falls es kein Ergebnis gibt wurde die neue Aufgabe nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
-    if(result.length === 0) {
-      err = new Error('Das Lernziel als Parent mit der UUID `' + parentUUID + '` existiert nicht');
-      err.status = 404;
-      err.name = 'TargetNotFound';
+        // falls es kein Ergebnis gibt wurde die neue Aufgabe nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
+        if(result.length === 0) {
+          err = new Error('Das Lernziel als Parent mit der UUID `' + parentUUID + '` existiert nicht');
+          err.status = 404;
+          err.name = 'TargetNotFound';
 
-      return callback(err);
-    }
+          return callback(err);
+        }
 
-    // hole gerade erstellte Aufgabe aus der Datenbank
-    db.cypher({
-      query: 'MATCH (a:Task) where ID(a) = {id} RETURN a',
-      params: {
-        id: result[0].a._id
-      }
-    }, function(err, result) {
-      if(err) return callback(err);
-      // erstelle neue Aufgabeninstanz und gib diese zurück
-      var a = new Task(result[0].a);
-      callback(null, a);
+        // hole gerade erstellte Aufgabe aus der Datenbank
+        db.cypher({
+          query: 'MATCH (a:Task) where ID(a) = {id} RETURN a',
+          params: {
+            id: result[0].a._id
+          }
+        }, function(err, result) {
+          if(err) return callback(err);
+          // erstelle neue Aufgabeninstanz und gib diese zurück
+          var a = new Task(result[0].a);
+          callback(null, a);
+        });
+
+      });
+
+    })
+    .catch(function(errors) {
+      return callback(errors);
     });
-
-  });
-
-};
-
-// Instanzmethoden
-
-/**
- * @function
- * @name del Löscht eine bestehende Aufgabe und seine Verbindung nach "oben" (zum übergeordneten Target) aus der Datenbank
- * @param {callback} callback Callbackfunktion, die die gelöschte Node engegennimmt
- */
-Task.prototype.del = function(callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (a:Task {uuid: {uuid}})-[r:BELONGS_TO]->(o)', // Aufgabe hängt immer an einem Target
-    'DELETE a, r'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-
-    // Keine Neo4J-Node kann gelöscht werden, falls noch Relationships daran hängen
-    if(err instanceof neo4j.DatabaseError &&
-       err.neo4j.code === 'Neo.DatabaseError.Transaction.CouldNotCommit') {
-
-      err = new Error('An der Aufgabe `'+self.uuid+'` hängen noch Beziehungen.');
-      err.name = 'RemainingRelationships';
-      err.status = 409;
-
-    }
-
-    if(err) return callback(err);
-    // gib `null` zurück (?!)
-    callback(null, null); // success
-  });
-
-};
-
-/**
- * @function
- * @name patch Aktualisiert die jeweilige Node mit neuen Informationen
- * @param {object} properties Objekt mit Attribute deren Werte aktualisiert bzw.
- * deren Key-Value-Paare angelegt werden sollen, falls sie nicht bereits bestehen.
- * Ändert nur die Attribute der Node und nicht deren Beziehungen (siehe #changeParent)
- * @param {callback} callback Callbackfunktion, die die aktualisierte Node entgegennimmt
- */
-Task.prototype.patch = function(properties, callback) {
-
-  var self = this;
-
-  try {
-    properties = validate.validate(Task.VALIDATION_INFO, properties, false); // `false` da SET +=<--
-  } catch(e) {
-    return callback(e);
-  }
-
-  var query = [
-    'MATCH (a:Task {uuid: {uuid}})',
-    'SET a += {properties}',
-    'RETURN a'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid,
-    properties: properties
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-
-    if(err) return callback(err);
-
-    if(result.length === 0) {
-      err = new Error('Es konnte keine passende Aufgabe gefunden werden');
-      err.status = 404;
-      err.name = 'AufgabeNotFound';
-
-      return callback(err);
-    }
-
-    // aktualisierte Aufgabeninstanz erzeugen und zurückgeben
-    var a = new Task(result[0].a);
-    callback(null, a);
-
-  });
 
 };
 

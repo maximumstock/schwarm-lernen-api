@@ -111,19 +111,10 @@ router.get('/degrees/:degreeUUID/config', helper.prefetchDegree, auth.restricted
 // Studiengang erstellen
 router.post('/degrees', auth.adminOnly, function(req, res, next) {
 
-  req.checkBody('name', 'Name des neuen Studiengangs fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
-
-  var conf = req.body.config || Config.DEFAULT_CONFIG;
-  delete req.body.config;
-
   Degree.create(req.body, function(err, degree) {
     if (err) return next(err);
     // create config
-    Config.create(conf, degree.uuid, function(actualError, config) {
+    Config.create(Config.DEFAULT_CONFIG, degree.uuid, function(actualError, config) {
       if(actualError) {
         return degree.del(function(err, result) {
           if(err) return next(err);
@@ -171,17 +162,6 @@ router.put('/degrees/:degreeUUID', auth.adminOnly, function(req, res, next) {
 // Config aktualsieren
 router.put('/degrees/:degreeUUID/config', auth.adminOnly, function(req, res, next) {
 
-  try {
-    if(req.body.solutionShare) req.body.solutionShare = parseInt(req.body.solutionShare);
-    if(req.body.taskShare) req.body.taskShare = parseInt(req.body.taskShare);
-    if(req.body.infoShare) req.body.infoShare = parseInt(req.body.infoShare);
-    if(req.body.infoPoints) req.body.infoPoints = parseInt(req.body.infoPoints);
-    if(req.body.taskPoints) req.body.taskPoints = parseInt(req.body.taskPoints);
-    if(req.body.solutionPoints) req.body.solutionPoints = parseInt(req.body.solutionPoints);
-  } catch (e) {
-    return next(e);
-  }
-
   Degree.get(req.params.degreeUUID, function(err, d) {
     if (err) return next(err);
     d.getConfig(function(err, config) {
@@ -199,13 +179,6 @@ router.put('/degrees/:degreeUUID/config', auth.adminOnly, function(req, res, nex
 // Lernziele an Studiengang hängen
 router.post('/degrees/:degreeUUID/targets', auth.adminOnly, function(req, res, next) {
 
-  req.checkBody('name', 'Name des neuen Lernziels fehlt').notEmpty();
-
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
-
   Degree.get(req.params.degreeUUID, function(err, d) {
     if (err) return next(err);
     Target.create(req.body, d.uuid, function(err, target) {
@@ -218,18 +191,12 @@ router.post('/degrees/:degreeUUID/targets', auth.adminOnly, function(req, res, n
 });
 
 // User für Studiengang erstellen
-router.put('/degrees/:degreeUUID/users', auth.adminOnly, helper.prefetchDegree, function(req, res, next) {
-
-  req.checkBody('amount', 'Anzahl der anzulegenden Accounts fehlt').notEmpty();
-  req.checkBody('amount', 'Parameter muss ein Ganzzahlwert sein').isInt();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
+router.put('/degrees/:degreeUUID/users', auth.adminOnly, helper.prefetchDegree, helper.prefetchConfig, function(req, res, next) {
 
   var degree = req._degree;
+  var config = req._config;
 
-  User.generate(parseInt(req.body.amount), function(err, users) {
+  User.generate(req.body.amount, function(err, users) {
     if(err) return next(err);
     // User erstmal erstellen
     var todo = users.map(function(i) {
@@ -237,7 +204,12 @@ router.put('/degrees/:degreeUUID/users', auth.adminOnly, helper.prefetchDegree, 
       return function(cb) {
         User.create(i, function(err, user) {
           if(err) return cb(err);
-          degree.addUserWithoutKey(user, cb); // neuen User zum Studiengang hinzufügen
+          // das Arbeitspaket aktualisieren
+          user.refreshPackage(config, function(err, user) {
+            if(err) return cb(err);
+            // neuen User zum Studiengang hinzufügen
+            degree.addUserWithoutKey(user.uuid, cb);
+          });
         });
       };
 
@@ -249,6 +221,9 @@ router.put('/degrees/:degreeUUID/users', auth.adminOnly, helper.prefetchDegree, 
         var err = new Error('Beim Erstellen von neuen Usern für den Studiengang `'+degree.uuid+'` ist ein Fehler aufgetreten');
         return next(err);
       }
+      users.forEach(function(i) {
+        delete i.createdAt;
+      });
       res.status(201).json(users);
     });
   });

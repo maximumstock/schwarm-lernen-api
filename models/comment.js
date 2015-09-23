@@ -15,10 +15,10 @@ var Comment = module.exports = function Comment(_node) {
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation');
-var errors = require('../lib/errors/errors');
 var dbhelper = require('../lib/db');
 var moment = require('moment');
+var indicative = require('indicative');
+var validator = new indicative();
 
 var Node = require('./node');
 var Task = require('./task');
@@ -36,11 +36,8 @@ Comment.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Kommentar-Nodes für Comment#create
-Comment.VALIDATION_INFO = {
-  comment: {
-    required: true,
-    message: 'Muss einen Textteil haben'
-  }
+Comment.VALIDATION_RULES = {
+  comment: 'required|string'
 };
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
@@ -176,52 +173,54 @@ Comment.getAll = function (callback) {
 Comment.create = function (properties, targetUUID, userUUID, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem:
-  try {
-    properties = validate.validate(Comment.VALIDATION_INFO, properties, true);
-  } catch (e) {
-    return callback(e);
-  }
+  validator
+    .validate(Comment.VALIDATION_RULES, properties)
+    .then(function() {
 
-  properties.createdAt = parseInt(moment().format('X'));
-  properties.author = userUUID;
+      properties.createdAt = parseInt(moment().format('X'));
+      properties.author = userUUID;
 
-  var query = [
-    'MATCH (a {uuid: {target}}), (u:User {uuid: {author}})',
-    'WHERE (a:Task) or (a:Info) or (a:Comment) or (a:Solution)',
-    'CREATE (a)<-[r:BELONGS_TO]-(c:Comment {properties})<-[r2:CREATED]-(u)',
-    'return c'
-  ].join('\n');
+      var query = [
+        'MATCH (a {uuid: {target}}), (u:User {uuid: {author}})',
+        'WHERE (a:Task) or (a:Info) or (a:Comment) or (a:Solution)',
+        'CREATE (a)<-[r:BELONGS_TO]-(c:Comment {properties})<-[r2:CREATED]-(u)',
+        'return c'
+      ].join('\n');
 
-  var params = {
-    properties: properties,
-    target: targetUUID,
-    author: userUUID
-  };
+      var params = {
+        properties: properties,
+        target: targetUUID,
+        author: userUUID
+      };
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
+      db.cypher({
+        query: query,
+        params: params
+      }, function (err, result) {
 
-    if (err) return callback(err);
-    // falls es kein Ergebnis gibt wurde der neue Kommentar nicht erstellt da es keinen passenden Autor oder Ziel gibt
-    if (result.length === 0) {
-      err = new Error('Der Benutzer `' + userUUID + '` oder das Ziel `' + targetUUID + '` existieren nicht');
-      err.status = 404;
-      err.name = 'TargetOrUserNotFound';
-      return callback(err);
-    }
+        if (err) return callback(err);
+        // falls es kein Ergebnis gibt wurde der neue Kommentar nicht erstellt da es keinen passenden Autor oder Ziel gibt
+        if (result.length === 0) {
+          err = new Error('Der Benutzer `' + userUUID + '` oder das Ziel `' + targetUUID + '` existieren nicht');
+          err.status = 404;
+          err.name = 'TargetOrUserNotFound';
+          return callback(err);
+        }
 
-    // hole gerade erstellten Kommentar aus der Datenbank
-    dbhelper.getNodeByID(result[0].c._id, function (err, node) {
-      if (err) return callback(err);
-      // erstelle neue Kommentarinstanz und gib diese zurück
-      var c = new Comment(node);
-      callback(null, c);
+        // hole gerade erstellten Kommentar aus der Datenbank
+        dbhelper.getNodeByID(result[0].c._id, function (err, node) {
+          if (err) return callback(err);
+          // erstelle neue Kommentarinstanz und gib diese zurück
+          var c = new Comment(node);
+          callback(null, c);
+        });
+
+      });
+
+    })
+    .catch(function(errors) {
+      return callback(errors);
     });
-
-  });
 
 };
 

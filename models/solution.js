@@ -15,8 +15,8 @@ var Solution = module.exports = function (_node) {
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation');
-var errors = require('../lib/errors/errors');
+var indicative = require('indicative');
+var validator = new indicative();
 var dbhelper = require('../lib/db');
 var moment = require('moment');
 
@@ -35,12 +35,11 @@ Solution.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Loesungs-Nodes für Loesung#create
-Solution.VALIDATION_INFO = {
-  description: {
-    required: true,
-    message: 'Muss eine Beschreibung haben'
-  }
+Solution.VALIDATION_RULES = {
+  description: 'required|string'
 };
+
+Solution.PROTECTED_ATTRIBUTES = ['createdAt', 'author', 'task'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -130,67 +129,71 @@ Solution.getAll = function (callback) {
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} taskUUID UUID der Aufgaben-Node für die die Lösung gilt
  * @param {string} userUUID UUID des Users, der die Lösung angefertigt hat
- * @param {integer} points Anzahl der Punkte die für das Erstellen verdient werden
+ * @param {integer} gainedPoints Anzahl der Punkte die für das Erstellen verdient werden
+ * @param {integer} spentPoints Anzahl der Punkte die das Erstellen kosten soll
  */
-Solution.create = function (properties, taskUUID, userUUID, points, callback) {
+Solution.create = function (properties, taskUUID, userUUID, gainedPoints, spentPoints, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem:
-  try {
-    properties = validate.validate(Solution.VALIDATION_INFO, properties, true);
-  } catch (e) {
-    return callback(e);
-  }
+  validator
+    .validate(Solution.VALIDATION_RULES, properties)
+    .then(function() {
 
-  properties.createdAt = parseInt(moment().format('X'));
-  properties.author = userUUID;
-  properties.task = taskUUID;
+      properties.createdAt = parseInt(moment().format('X'));
+      properties.author = userUUID;
+      properties.task = taskUUID;
 
-  var query = [
-    'MATCH (a:Task {uuid: {task}}), (u:User {uuid: {author}})',
-    'MERGE (a)<-[r1:SOLVES]-(s:Solution)<-[r2:CREATED]-(u)',
-    'ON CREATE SET s = {properties}, r2.points = {points}',
-    'return s'
-  ].join('\n');
+      var query = [
+        'MATCH (a:Task {uuid: {task}}), (u:User {uuid: {author}})',
+        'MERGE (a)<-[r1:SOLVES]-(s:Solution)<-[r2:CREATED]-(u)',
+        'ON CREATE SET s = {properties}, r2.gainedPoints = {gainedPoints}, r2.spentPoints = {spentPoints}',
+        'return s'
+      ].join('\n');
 
-  var params = {
-    properties: properties,
-    points: points,
-    task: taskUUID,
-    author: userUUID
-  };
+      var params = {
+        properties: properties,
+        gainedPoints: gainedPoints,
+        spentPoints: spentPoints,
+        task: taskUUID,
+        author: userUUID
+      };
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
+      db.cypher({
+        query: query,
+        params: params
+      }, function (err, result) {
 
-    if (err) return callback(err);
-    // falls es kein Ergebnis gibt wurde die neue Lösung nicht erstellt da es keinen passenden Autor oder Aufgabe gibt
-    if (result.length === 0) {
-      err = new Error('Die Aufgabe `' + taskUUID + '` existiert nicht');
-      err.status = 404;
-      err.name = 'TaskNotFound';
-      return callback(err);
-    }
+        if (err) return callback(err);
+        // falls es kein Ergebnis gibt wurde die neue Lösung nicht erstellt da es keinen passenden Autor oder Aufgabe gibt
+        if (result.length === 0) {
+          err = new Error('Die Aufgabe `' + taskUUID + '` existiert nicht');
+          err.status = 404;
+          err.name = 'TaskNotFound';
+          return callback(err);
+        }
 
-    // obige Query fängt nicht den Fall ab, falls bereits eine Lösung bestand
-    if(result[0].s.properties.createdAt !== properties.createdAt) {
-      // Lösung bestand bereits
-      err = new Error('Du hast die Aufgabe bereits gelöst');
-      err.status = 409;
-      err.name = 'TaskAlreadySolved';
-      return callback(err);
-    }
+        // obige Query fängt nicht den Fall ab, falls bereits eine Lösung bestand
+        if(result[0].s.properties.createdAt !== properties.createdAt) {
+          // Lösung bestand bereits
+          err = new Error('Du hast die Aufgabe bereits gelöst');
+          err.status = 409;
+          err.name = 'TaskAlreadySolved';
+          return callback(err);
+        }
 
-    // hole gerade erstellte Lösung aus der Datenbank
-    dbhelper.getNodeByID(result[0].s._id, function (err, node) {
-      if (err) return callback(err);
-      // erstelle neue Lösungsinstanz und gib diese zurück
-      var l = new Solution(node);
-      callback(null, l);
+        // hole gerade erstellte Lösung aus der Datenbank
+        dbhelper.getNodeByID(result[0].s._id, function (err, node) {
+          if (err) return callback(err);
+          // erstelle neue Lösungsinstanz und gib diese zurück
+          var l = new Solution(node);
+          callback(null, l);
+        });
+      });
+
+    })
+    .catch(function(errors) {
+      return callback(errors);
     });
-  });
 
 };
 

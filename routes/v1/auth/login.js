@@ -53,6 +53,12 @@ router.post('/login', function(req, res, next) {
         token: token
       });
 
+      // User-Login Zeitstempel aktualisieren
+      user.updateLoginTimestamp(function(err, result) {
+        if(err) return console.error(err);
+        console.log('Zeitstempel aktualisiert für', user.username);
+      });
+
     }
   });
 

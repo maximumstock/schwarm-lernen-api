@@ -15,8 +15,8 @@ var User = module.exports = function User(_node) {
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation');
-var errors = require('../lib/errors/errors');
+var indicative = require('indicative');
+var validator = new indicative();
 var dbhelper = require('../lib/db');
 var moment = require('moment');
 var pwgen = require('password-generator');
@@ -38,17 +38,9 @@ User.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Kommentar-Nodes für Comment#create
-User.VALIDATION_INFO = {
-  username: {
-    required: true,
-    minLength: config.DEFAULT_USERNAME_LENGTH,
-    message: 'Muss einen Username haben.'
-  },
-  password: {
-    required: true,
-    minLength: config.DEFAULT_PASSWORD_LENGTH,
-    message: 'Muss ein Passwort haben'
-  }
+User.VALIDATION_RULES = {
+  username: 'required|string|alpha_numeric|min:'+config.DEFAULT_USERNAME_LENGTH,
+  password: 'required|string|alpha_numeric|min:'+config.DEFAULT_PASSWORD_LENGTH
 };
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
@@ -67,18 +59,59 @@ Object.defineProperty(User.prototype, 'username', {
   }
 });
 
-/**
- * @function Propertydefinition für das Passwort des Nutzers
- * @prop {string} password Passwort
- */
+// Propertydefinition für das Passwort des Nutzers
 Object.defineProperty(User.prototype, 'password', {
   get: function () {
     return this.properties.password;
-  },
-  set: function (value) {
-    this.properties.password = value;
-  },
-  configurable: true
+  }
+});
+
+Object.defineProperty(User.prototype, 'tasksToDo', {
+  get: function () {
+    return this.properties.tasksToDo;
+  }
+});
+
+Object.defineProperty(User.prototype, 'tasksDone', {
+  get: function () {
+    return this.properties.tasksDone;
+  }
+});
+
+Object.defineProperty(User.prototype, 'solutionsToDo', {
+  get: function () {
+    return this.properties.solutionsToDo;
+  }
+});
+
+Object.defineProperty(User.prototype, 'solutionsDone', {
+  get: function () {
+    return this.properties.solutionsDone;
+  }
+});
+
+Object.defineProperty(User.prototype, 'infosToDo', {
+  get: function () {
+    return this.properties.infosToDo;
+  }
+});
+
+Object.defineProperty(User.prototype, 'infosDone', {
+  get: function () {
+    return this.properties.infosDone;
+  }
+});
+
+Object.defineProperty(User.prototype, 'ratingsToDo', {
+  get: function () {
+    return this.properties.ratingsToDo;
+  }
+});
+
+Object.defineProperty(User.prototype, 'ratingsDone', {
+  get: function () {
+    return this.properties.ratingsDone;
+  }
 });
 
 // Öffentliche Methoden
@@ -207,6 +240,13 @@ User.isValidUsername = function(username, callback) {
  */
 User.generate = function(number, callback) {
 
+  if(typeof(number) !== 'number') {
+    var err = new Error('User.generate muss mit einem Ganzzahlwert aufgerufen werden');
+    err.status = 400;
+    err.name = 'N00bUser';
+    return callback(err);
+  }
+
   var accounts = [];
   for(var i = 0; i < number; i++) {
     accounts.push({
@@ -254,54 +294,56 @@ User.generate = function(number, callback) {
 User.create = function (properties, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem:
-  try {
-    properties = validate.validate(User.VALIDATION_INFO, properties, true);
-  } catch (e) {
-    return callback(e);
-  }
+  validator
+    .validate(User.VALIDATION_RULES, properties)
+    .then(function() {
 
-  // gewählten Nutzernamen überprüfen
-  User.isValidUsername(properties.username, function(err, bool) {
-    if(err) return callback(err);
-    if(!bool) {
-      // Username bereits verwendet
-      err = new Error('Username `' + properties.username + '` wird bereits verwendet');
-      err.status = 409;
-      err.name = 'UsernameAlreadyExists';
-      callback(err, null);
-    } else {
+      // gewählten Nutzernamen überprüfen
+      User.isValidUsername(properties.username, function(err, bool) {
+        if(err) return callback(err);
+        if(!bool) {
+          // Username bereits verwendet
+          err = new Error('Username `' + properties.username + '` wird bereits verwendet');
+          err.status = 409;
+          err.name = 'UsernameAlreadyExists';
+          callback(err, null);
+        } else {
 
-      // User erstellen
-      properties.createdAt = parseInt(moment().format('X'));
+          // User erstellen
+          properties.createdAt = parseInt(moment().format('X'));
 
-      var query = [
-        'CREATE (u:User {properties})',
-        'return u'
-      ].join('\n');
+          var query = [
+            'CREATE (u:User {properties})',
+            'return u'
+          ].join('\n');
 
-      var params = {
-        properties: properties
-      };
+          var params = {
+            properties: properties
+          };
 
-      db.cypher({
-        query: query,
-        params: params
-      }, function (err, result) {
+          db.cypher({
+            query: query,
+            params: params
+          }, function (err, result) {
 
-        if (err) return callback(err);
-        // hole gerade erstellten User aus der Datenbank
-        dbhelper.getNodeByID(result[0].u._id, function (err, node) {
-          if (err) return callback(err);
-          // erstelle neue Userinstanz und gib diese zurück
-          var u = new User(node);
-          callback(null, u);
-        });
+            if (err) return callback(err);
+            // hole gerade erstellten User aus der Datenbank
+            dbhelper.getNodeByID(result[0].u._id, function (err, node) {
+              if (err) return callback(err);
+              // erstelle neue Userinstanz und gib diese zurück
+              var u = new User(node);
+              callback(null, u);
+            });
+          });
+
+
+        }
       });
 
-
-    }
-  });
+    })
+    .catch(function(errors) {
+      return callback(errors);
+    });
 
 };
 
@@ -526,6 +568,7 @@ User.prototype.getSolutions = function(callback) {
 
 /**
  * @function Liefert Aufschlüsselung über das Punktekonto des Nutzers
+ * Als `inaktiv` markierte Nodes sind hierbei ausgenommen
  * @returns Ein Objekt mit den Punkten für Aufgaben, Lösungen, Infos
  */
 User.prototype.getPoints = function(callback) {
@@ -534,9 +577,9 @@ User.prototype.getPoints = function(callback) {
 
   var query = [
     'MATCH (u:User {uuid: {userUUID}})',
-    'OPTIONAL MATCH (u)-[r:CREATED]-(n)',
-    'OPTIONAL MATCH (u)-[r2:RATES]-(n2)',
-    'OPTIONAL MATCH (u)-[:CREATED]->(n3)<-[r3:RATES]-(u2:User)',
+    'OPTIONAL MATCH (u)-[r:CREATED]-(n) WHERE NOT n:Inactive',
+    'OPTIONAL MATCH (u)-[r2:RATES]-(n2) WHERE NOT n2:Inactive',
+    'OPTIONAL MATCH (u)-[:CREATED]->(n3)<-[r3:RATES]-(u2:User) WHERE NOT n3:Inactive',
     'RETURN r,n,r2,r3'
   ].join('\n');
 
@@ -551,54 +594,67 @@ User.prototype.getPoints = function(callback) {
     if(err) return callback(err);
 
     var points = {
-      tasks: 0,
-      solutions: 0, // Summe aller Punkte die zum Einstellen von Lösungen ausgegeben wurde
-      infos: 0,
-      ratings: 0,
-      total: 0
+      tasks: {spent: 0, gained: 0},
+      solutions: {spent: 0, gained: 0},
+      infos: {spent: 0, gained: 0},
+      ratings: {spent: 0, gained: 0},
+      total: {spent: 0, gained: 0}
     };
 
     result.forEach(function(i) {
 
+      var gain = 0;
+      var cost = 0;
+
       // Punkte kommen entweder vom Erstellen von Content -> i.r2 ist NULL
       if(i.n && i.r) {
         var labels = i.n.labels;
-        var p = parseInt(i.r.properties.points || 0);
-        points.total += p;
+
+        gain = parseInt(i.r.properties.gainedPoints);
+        cost = parseInt(i.r.properties.spentPoints);
+
+        points.total.gained += gain;
+        points.total.spent += cost;
 
         if(labels.indexOf('Task') > -1) {
-          points.tasks += p;
+          points.tasks.gained += gain;
+          points.tasks.spent += cost;
         } else if(labels.indexOf('Solution') > -1) {
-          points.solutions += p;
+          points.solutions.gained += gain;
+          points.solutions.spent += cost;
         } else if(labels.indexOf('Info') > -1){
-          points.infos += p;
+          points.infos.gained += gain;
+          points.infos.spent += cost;
         }
 
         // oder von den Bewertungen anderer des eigenen Contents
         if(i.r3) {
           var rating = i.r3.properties;
-          var avg = (rating.r1 + rating.r2 + rating.r3 + rating.r4 + rating.r5) / 5;
-          points.total += avg;
+          gain = (rating.r1 + rating.r2 + rating.r3 + rating.r4 + rating.r5) / 5 * rating.rateMultiplier;
+          points.total.gained += gain;
 
           if(labels.indexOf('Task') > -1) {
-            points.tasks += avg;
+            points.tasks.gained += gain;
           } else if(labels.indexOf('Solution') > -1) {
-            points.solutions += avg;
+            points.solutions.gained += gain;
           } else if(labels.indexOf('Info') > -1){
-            points.infos += avg;
+            points.infos.gained += gain;
           }
 
         }
       }
 
-
       // oder Punkte kommen von gegebenen Bewertungen -> dann ist i.r & i.n NULL
       if(i.r2) {
-        var ratePoints = parseInt(i.r2.properties.points || 0);
-        points.ratings += ratePoints;
-        points.total += ratePoints;
-      }
+        gain = parseInt(i.r2.properties.gainedPoints);
+        cost = parseInt(i.r2.properties.spentPoints);
 
+        points.ratings.gained += gain;
+        points.ratings.spent += cost;
+
+        points.total.gained += gain;
+        points.total.spent += cost;
+      }
     });
 
     callback(null, points);
@@ -612,9 +668,13 @@ User.prototype.getPoints = function(callback) {
  */
 User.prototype.hasPoints = function(amount, cb) {
 
+  if(amount === 0) return cb(null, true);
+
   this.getPoints(function(err, points) {
     if(err) return cb(err);
-    if(points.total < amount) {
+    var total = points.total.gained - points.total.spent;
+    console.log(total);
+    if(total < amount) {
       return cb(null, false);
     } else {
       return cb(null, true);
@@ -657,9 +717,11 @@ User.prototype.hasCreated = function(nodeUUID, callback) {
  * Falls bereits eine Bewertung besteht wird sie überschrieben
  * @param {string} nodeUUID UUID der zu bewertenden Node
  * @param {object} rating Objekt mit mehreren Bewertungen (momentan r1-r5) als Integer (1-5)
- * @param {integer} points Anzahl der Punkte die der Ersteller der Bewertung erhalten soll
+ * @param {integer} gainedPoints Anzahl der Punkte die der Ersteller der Bewertung erhalten soll
+ * @param {integer} spentPoints Anzahl der Punkte die die Bewertung dem Ersteller kosten soll
+ * @param {integer} rateMultiplier Multiplikator für die aktuelle Bewertung
  */
-User.prototype.rate = function(nodeUUID, rating, points, callback) {
+User.prototype.rate = function(nodeUUID, rating, gainedPoints, spentPoints, rateMultiplier, callback) {
 
   var self = this;
 
@@ -686,7 +748,7 @@ User.prototype.rate = function(nodeUUID, rating, points, callback) {
       var query = [
         'MATCH (u:User {uuid: {userUUID}}), (n {uuid: {nodeUUID}})',
         'MERGE (u)-[r:RATES]->(n)',
-        'ON CREATE SET r = {rating}, r.points = {points}',
+        'ON CREATE SET r = {rating}, r.gainedPoints = {gainedPoints}, r.spentPoints = {spentPoints}, r.rateMultiplier = {rateMultiplier}',
         'ON MATCH SET r = {rating}'
       ].join('\n');
 
@@ -694,7 +756,9 @@ User.prototype.rate = function(nodeUUID, rating, points, callback) {
         nodeUUID: nodeUUID,
         userUUID: self.uuid,
         rating: rating,
-        points: points
+        gainedPoints: gainedPoints,
+        spentPoints: spentPoints,
+        rateMultiplier: rateMultiplier
       };
 
       db.cypher({
@@ -704,6 +768,68 @@ User.prototype.rate = function(nodeUUID, rating, points, callback) {
         return callback(err, true);
       });
     }
+  });
+
+};
+
+/**
+ * @function Aktualisiert das Attribut `lastLogin` des Nutzers
+ */
+User.prototype.updateLoginTimestamp = function(cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})',
+    'SET u.lastLogin = {timestamp}'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid,
+    timestamp: require('moment')().format('X')
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    return cb(null, true);
+  });
+
+};
+
+/**
+ * @function Erneuert die Einstellungslimits (Aufgaben, Infos, Bewertungen) des Nutzers
+ * @param {object} config Das Konfigurationsobjekt des betreffenden Studiengangs mit den Werten für
+ * taskShare, infoShare, rateShare
+ */
+User.prototype.refreshPackage = function(config, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})',
+    'SET u.tasksToDo = {tasksToDo}, u.infosToDo = {infosToDo}, u.solutionsToDo = {solutionsToDo}, u.ratingsToDo = {ratingsToDo}, u.ratingsDone = 0, u.tasksDone = 0, u.infosDone = 0, u.solutionsDone = 0',
+    'RETURN u'
+  ].join('\n');
+
+  // falls für Aufgaben, Lösungen, Infos oder Bewertungen keine maximale Anzahl gegeben ist, wird das Limit des Pakets auf -1 gesetzt
+  // mit einem negativen Wert kann später der Fall behandelt werden, dass es für diese Aktion kein Limit/keine Mindestanzahl gibt
+  var params = {
+    userUUID: self.uuid,
+    tasksToDo: Math.round(config.packageSize * config.taskShare) === 0 ? -1 : Math.round(config.packageSize * config.taskShare),
+    infosToDo: Math.round(config.packageSize * config.infoShare) === 0 ? -1 : Math.round(config.packageSize * config.infoShare),
+    solutionsToDo: Math.round(config.packageSize * config.solutionShare) === 0 ? -1 : Math.round(config.packageSize * config.solutionShare),
+    ratingsToDo: Math.round(config.packageSize * config.rateShare) === 0 ? -1 : Math.round(config.packageSize * config.rateShare)
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    cb(null, new User(result[0].u));
   });
 
 };
@@ -735,6 +861,76 @@ User.prototype.getMyRatingFor = function(nodeUUID, cb) {
       return cb(null, null);
     } else {
       return cb(null, result[0].r.properties);
+    }
+  });
+
+};
+
+/**
+ * @function Helferfunktion die überprüft ob das aktuelle Arbeitspaket abgearbeitet wurde
+ */
+User.prototype.hasFinishedPackage = function() {
+
+  var self = this;
+
+  return self.tasksToDo === 0 && self.infosToDo === 0 && self.solutionsToDo === 0 && self.ratingsToDo === 0;
+
+};
+
+/**
+ * @function Aktualisiert den Arbeitspaketstatus des Nutzers und weist gegebenenfalls ein neues Arbeitspaket zu
+ * Mit einem Aufruf dieser Funktionen kann lediglich eine Arbeitspaket-Aktion registriert werden. Falls also
+ * der Nutzer 2 Aufgaben einstellt obwohl das Arbeitspaket nur noch 1 Aufgabe verlangt und der Nutzer vor
+ * Beendigung des aktuellen Pakets noch anderweitige Punkte abzuarbeiten hat, muss diese Funktion erneut aufgerufen werden.
+ * @param {object} job Ein Objekt welches beschreibt was der Nutzer in der Zwischenzeit bearbeitet hat
+ * @param {object} config Das Konfigurationsobjekt der jeweiligen Konfiguration für das ggf. neue Arbeitspaket
+ */
+User.prototype.didWorkOnPackage = function(job, config, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})',
+    'SET u.tasksToDo = {tasksToDo}, u.infosToDo = {infosToDo}, u.ratingsToDo = {ratingsToDo}, u.solutionsToDo = {solutionsToDo}',
+    'RETURN u'
+  ].join('\n');
+
+  var params = self.properties; // Parameter einfach die Attribute des aktuellen Nutzers zuweisen damit später überschrieben werden kann was sich verändert
+  params.userUUID = self.uuid;
+
+  // je nachdem was "angekreuzt" wurde, muss das Arbeitspaket aktualisiert werden
+  // außerdem dürfen die Limits nicht auf -1 stehen, da dies der Fall ist, dass es auf dieser Aktion kein Limit/keine Mindestanzahl gibt
+
+  if(job.tasks && self.tasksToDo !== -1) {
+    params.tasksToDo = self.tasksToDo - 1;
+    params.tasksDone = params.taskDone + 1;
+  } else if(job.infos && self.infosToDo !== -1) {
+    params.infosToDo = self.infosToDo - 1;
+    params.infosDone = params.infosDone + 1;
+  } else if(job.solutions && self.solutionsToDo !== -1) {
+    params.solutionsToDo = self.solutionsToDo - 1;
+    params.solutionsDone = params.solutionsDone + 1;
+  } else if(job.ratings && self.ratingsToDo !== -1){
+    params.ratingsToDo = self.ratingsToDo - 1;
+    params.ratingsDone = params.ratingsDone + 1;
+  }
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    if(result.length === 0) {
+      console.error('User.didWorkOnPackage: user nichte gefunden, sollte nicht passieren, uuid:', self.uuid);
+    }
+    // Arbeitspaket wurde aktualisiert
+    var newUser = new User(result[0].u); // neues User-Objekt mit neuen Daten
+    if(newUser.hasFinishedPackage()) {
+      // neues Paket erstellen
+      newUser.refreshPackage(config, cb);
+    } else {
+      // das alte Paket des Users ist noch nicht abgearbeitet
+      return cb(null, null);
     }
   });
 

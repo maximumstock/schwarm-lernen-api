@@ -15,8 +15,8 @@
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation');
-var errors = require('../lib/errors/errors');
+var indicative = require('indicative');
+var validator = new indicative();
 var dbhelper = require('../lib/db');
 var moment = require('moment');
 
@@ -34,13 +34,11 @@ Target.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Lernziel-Nodes für Lernziel#create
-Target.VALIDATION_INFO = {
-  name: {
-    required: true,
-    minLength: 3,
-    message: 'Muss einen Namen haben.'
-  }
+Target.VALIDATION_RULES = {
+  name: 'required|string|alpha_numeric'
 };
+
+Target.PROTECTED_ATTRIBUTES = ['createdAt'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -138,56 +136,57 @@ Target.getAll = function(callback) {
 Target.create = function(properties, parentUUID, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem:
-  // - dass ein Name für die neue Node vorhanden ist
-  try {
-    properties = validate.validate(Target.VALIDATION_INFO, properties, true);
-  } catch(e) {
-    return callback(e);
-  }
+  validator
+    .validate(Target.VALIDATION_RULES, properties)
+    .then(function() {
 
-  properties.createdAt = parseInt(moment().format('X'));
+      properties.createdAt = parseInt(moment().format('X'));
 
-  var query = [
-    'MATCH (dt {uuid: {parent}})',
-    'WHERE (dt:Degree) or (dt:Target)', // Targets sind nur mit anderen Targets oder Degrees verbunden
-    'MERGE (t:Target {name: {name}})-[r:PART_OF]->(dt)',
-    'ON CREATE SET t = {properties}',
-    'return t'
-  ].join('\n');
+      var query = [
+        'MATCH (dt {uuid: {parent}})',
+        'WHERE (dt:Degree) or (dt:Target)', // Targets sind nur mit anderen Targets oder Degrees verbunden
+        'MERGE (t:Target {name: {name}})-[r:PART_OF]->(dt)',
+        'ON CREATE SET t = {properties}',
+        'return t'
+      ].join('\n');
 
-  var params = {
-    properties: properties,
-    name: properties.name,
-    parent: parentUUID
-  };
+      var params = {
+        properties: properties,
+        name: properties.name,
+        parent: parentUUID
+      };
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
+      db.cypher({
+        query: query,
+        params: params
+      }, function(err, result) {
 
-    if (err) return callback(err);
+        if (err) return callback(err);
 
-    // falls es kein Ergebnis gibt wurde das neue Lernziel nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
-    if(result.length === 0) {
-      err = new Error('Es gibt keinen gültigen Studiengang/kein gültiges Lernziel als Parent mit der UUID `' + parentUUID + '`');
-      err.status = 404;
-      err.name = 'ParentNotFound';
+        // falls es kein Ergebnis gibt wurde das neue Lernziel nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
+        if(result.length === 0) {
+          err = new Error('Es gibt keinen gültigen Studiengang/kein gültiges Lernziel als Parent mit der UUID `' + parentUUID + '`');
+          err.status = 404;
+          err.name = 'ParentNotFound';
 
-      return callback(err);
-    }
+          return callback(err);
+        }
 
-    // hole gerade erstelles Lernziel aus der Datenbank
-    var id = result[0].t._id;
-    dbhelper.getNodeByID(id, function(err, node) {
-      if(err) return callback(err);
-      // erstelle neue Lernzielinstanz und gib diese zurück
-      var t = new Target(node);
-      callback(null, t);
+        // hole gerade erstelles Lernziel aus der Datenbank
+        var id = result[0].t._id;
+        dbhelper.getNodeByID(id, function(err, node) {
+          if(err) return callback(err);
+          // erstelle neue Lernzielinstanz und gib diese zurück
+          var t = new Target(node);
+          callback(null, t);
+        });
+
+      });
+
+    })
+    .catch(function(errors) {
+      return callback(errors);
     });
-
-  });
 
 };
 
@@ -245,11 +244,9 @@ Target.prototype.patch = function(properties, callback) {
 
   var self = this;
 
-  try {
-    properties = validate.validate(Target.VALIDATION_INFO, properties, false); // `false` da SET +=<--
-  } catch(e) {
-    return callback(e);
-  }
+  Target.PROTECTED_ATTRIBUTES.forEach(function(i) {
+    if(properties.hasOwnProperty(i)) delete properties[i];
+  });
 
   properties.changedAt = parseInt(moment().format('X'));
 

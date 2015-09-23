@@ -68,12 +68,40 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
 
   var target = req._target;
   var config = req._config;
+  var user = req.user;
 
-  Info.create(req.body, target.uuid, req.user.uuid, config.infoPoints, function(err, info) {
-    if(err) return next(err);
-    info.addMetadata(API_VERSION);
-    res.json(info);
-  });
+  // überprüfe ob der Nutzer noch Infos erstellen darf
+  // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
+  // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+  // falls > 0: Einstellung möglich
+  if(user.infosToDo !== 0) {
+    // überprüfe ob der Nutzer noch genug Punkte hat
+    user.hasPoints(config.infoCost, function(err, heDoes) {
+      if(err) return next(err);
+      if(!heDoes) {
+        err = new Error('Du hast nicht genug Punkte um eine Info einzustellen');
+        err.status = 409;
+        err.name = 'MissingPoints';
+        return next(err);
+      } else {
+        Info.create(req.body, target.uuid, req.user.uuid, config.infoPoints, config.infoCost, function(err, info) {
+          if(err) return next(err);
+          info.addMetadata(API_VERSION);
+          res.json(info);
+          // Arbeitspaketstatus aktualisieren
+          user.didWorkOnPackage({tasks: 0, infos: 1, solutions: 0, ratings: 0}, config, function(err, result) {
+            if(err) console.error(err);
+          });
+        });
+      }
+    });
+  } else {
+    // Nutzer muss erst Paket abarbeiten
+    var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Infos erstellen darfst');
+    err.status = 409;
+    err.name = 'WorkPackageNotDone';
+    res.json(err);
+  }
 
 });
 
@@ -88,12 +116,42 @@ router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted
 
   var target = req._target;
   var config = req._config;
+  var user = req.user;
 
-  Task.create(req.body, target.uuid, req.user.uuid, config.taskPoints, function(err, task) {
-    if(err) return next(err);
-    task.addMetadata(API_VERSION);
-    res.json(task);
-  });
+  // überprüfe ob der Nutzer noch Aufgaben erstellen darf
+  // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
+  // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+  // falls > 0: Einstellung möglich
+  if(user.tasksToDo !== 0) {
+
+    // überprüfe ob der Nutzer noch genug Punkte hat
+    user.hasPoints(config.taskCost, function(err, heDoes) {
+      if(err) return next(err);
+      if(!heDoes) {
+        err = new Error('Du hast nicht genug Punkte um eine Aufgabe einzustellen');
+        err.status = 409;
+        err.name = 'MissingPoints';
+        return next(err);
+      } else {
+        Task.create(req.body, target.uuid, req.user.uuid, config.taskPoints, config.taskCost, function(err, task) {
+          if(err) return next(err);
+          task.addMetadata(API_VERSION);
+          res.json(task);
+          // Arbeitspaketstatus aktualisieren
+          user.didWorkOnPackage({tasks: 1, infos: 0, solutions: 0, ratings: 0}, config, function(err, result) {
+            if(err) console.error(err);
+          });
+        });
+      }
+    });
+
+  } else {
+    // Nutzer muss erst Paket abarbeiten
+    var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Aufgaben erstellen darfst');
+    err.status = 409;
+    err.name = 'WorkPackageNotDone';
+    res.json(err);
+  }
 
 });
 

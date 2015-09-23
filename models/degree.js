@@ -15,8 +15,8 @@
 
 var neo4j = require('neo4j');
 var config = require('../config/config');
-var validate = require('../lib/validation/validation').validate;
-var errors = require('../lib/errors/errors');
+var indicative = require('indicative');
+var validator = new indicative();
 var dbhelper = require('../lib/db');
 var moment = require('moment');
 
@@ -34,13 +34,11 @@ Degree.prototype = Object.create(Node.prototype);
 // Öffentliche Konstanten
 
 // Enthält Informationen zum Validieren von Attributen neuer Degrees für Degree#create
-Degree.VALIDATION_INFO = {
-  name: {
-    required: true,
-    minLength: 3,
-    message: 'Muss einen Namen haben.'
-  }
+Degree.VALIDATION_RULES = {
+  name: 'required|string|alpha_numeric'
 };
+
+Degree.PROTECTED_ATTRIBUTES = ['createdAt'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -121,53 +119,55 @@ Degree.getAll = function (callback) {
 Degree.create = function (properties, callback) {
 
   // Validierung
-  // `validate()` garantiert unter anderem, dass mindestens ein Name für die neue Node vorhanden ist
-  try {
-    properties = validate(Degree.VALIDATION_INFO, properties, true);
-  } catch (e) {
-    return callback(e);
-  }
+  validator
+    .validate(Degree.VALIDATION_RULES, properties)
+    .then(function() {
 
-  properties.createdAt = parseInt(moment().format('X'));
+      properties.createdAt = parseInt(moment().format('X'));
 
-  var query = [
-    'CREATE (d:Degree {properties})',
-    'RETURN d'
-  ].join('\n');
+      var query = [
+        'CREATE (d:Degree {properties})',
+        'RETURN d'
+      ].join('\n');
 
-  var params = {
-    properties: properties
-  };
+      var params = {
+        properties: properties
+      };
 
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
+      db.cypher({
+        query: query,
+        params: params
+      }, function (err, result) {
 
-    // falls der Name schon verwendet wird fängt unser Constraint diesen Fall ab
-    if (err instanceof neo4j.ClientError &&
-      err.neo4j.code === 'Neo.ClientError.Schema.ConstraintViolation') {
+        // falls der Name schon verwendet wird fängt unser Constraint diesen Fall ab
+        if (err instanceof neo4j.ClientError &&
+          err.neo4j.code === 'Neo.ClientError.Schema.ConstraintViolation') {
 
-      // Studiengangname besteht bereits
-      // Erzeuge neuen, übersichtlicheren Fehler für Nutzer
-      err = new Error('Es besteht bereits ein Studiengang names `' + properties.name + '`.');
-      err.name = 'DegreeAlreadyExists';
-      err.status = 409;
+          // Studiengangname besteht bereits
+          // Erzeuge neuen, übersichtlicheren Fehler für Nutzer
+          err = new Error('Es besteht bereits ein Studiengang names `' + properties.name + '`.');
+          err.name = 'DegreeAlreadyExists';
+          err.status = 409;
 
-    }
+        }
 
-    if (err) return callback(err);
-    // gerade erstellte Instanz hat noch keine uuid -> mit `_id` Property nochmal querien
-    var id = result[0].d._id;
-    dbhelper.getNodeByID(id, function (err, node) {
+        if (err) return callback(err);
+        // gerade erstellte Instanz hat noch keine uuid -> mit `_id` Property nochmal querien
+        var id = result[0].d._id;
+        dbhelper.getNodeByID(id, function (err, node) {
 
-      if (err) return callback(err);
-      var d = new Degree(node);
-      callback(null, d);
+          if (err) return callback(err);
+          var d = new Degree(node);
+          callback(null, d);
 
+        });
+
+      });
+
+    })
+    .catch(function(errors) {
+      return callback(errors);
     });
-
-  });
 
 };
 
@@ -222,13 +222,9 @@ Degree.prototype.patch = function (properties, callback) {
 
   var self = this;
 
-  try {
-    // validate() mit `false` da SET +=<--
-    // falls `true` müsste z.B. stets der Name mitgesendet werden, da der Name oben als `required` definiert ist
-    properties = validate(Degree.VALIDATION_INFO, properties, false);
-  } catch (e) {
-    return callback(e);
-  }
+  Degree.PROTECTED_ATTRIBUTES.forEach(function(i) {
+    if(properties.hasOwnProperty(i)) delete properties[i];
+  });
 
   properties.changedAt = parseInt(moment().format('X'));
 
