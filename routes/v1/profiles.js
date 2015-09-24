@@ -28,7 +28,7 @@ router.get('/self', function(req, res, next) {
     solutions: API_VERSION + '/self/solutions',
     infos: API_VERSION + '/self/infos',
     points: API_VERSION + '/self/points',
-    package: API_VERSION + '/self/package'
+    workpackage: API_VERSION + '/self/workpackage'
   });
 });
 
