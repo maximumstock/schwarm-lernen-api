@@ -100,7 +100,7 @@ router.get('/self/points', function(req, res, next) {
 });
 
 // Die aktuelle Arbeitspaketsituation zurückliefern
-router.get('/self/package', function(req, res, next) {
+router.get('/self/workpackage', function(req, res, next) {
 
   var user = req.user;
   res.json({

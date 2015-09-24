@@ -144,6 +144,7 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 * `GET /self/tasks/sovled` - Liefert alle vom aktuellen User gelösten Aufgaben
 * `GET /self/infos` - Liefert alle Infos des aktuellen Users
 * `GET /self/points` - Liefert Punktekonto des aktuellen Users
+* `GET /self/workpackage` - Liefert die aktuelle Arbeitspaketsituation des Nutzers
 
 ---
 
