@@ -88,7 +88,7 @@ router.post('/infos/:infoUUID/rating', helper.prefetchInfo, auth.restricted, hel
             return next(err);
           } else {
 
-            user.rate(req.params.taskUUID, req.body, config.ratePoints, config.rateCost, config.rateMultiplier, function(err, result) {
+            user.rate(req.params.infoUUID, req.body, config.ratePoints, config.rateCost, config.rateMultiplier, function(err, result) {
               if(err) return next(err);
               res.status(201).json({success: true});
 
