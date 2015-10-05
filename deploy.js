@@ -6,22 +6,22 @@
 
 var neo4j = require('neo4j');
 
-// Konfigurationsdatei laden
-var config = require('./config/config');
+var DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'admin';
 
 var db = new neo4j.GraphDatabase({
-  url: config.NEO4J_URL
+  url: 'http://localhost:7474/graphaware'
 });
 
 var query = [
   'MERGE (u:User:Admin {username: "admin"})',
-  'SET u.password = {properties}.password'
+  'SET u.password = {properties}.password',
+  'RETURN u'
 ].join('\n');
 
 var params = {
   properties: {
     username: 'admin',
-    password: config.DEFAULT_ADMIN_PASSWORD
+    password: DEFAULT_ADMIN_PASSWORD
   }
 };
 
@@ -30,5 +30,5 @@ db.cypher({
   params: params
 }, function(err, result) {
   if(err) throw err;
-  console.log('Adminuser angelegt');
+  console.log('Adminuser angelegt', JSON.stringify(result[0].u, null, 2));
 });
