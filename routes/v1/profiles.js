@@ -28,6 +28,7 @@ router.get('/self', function(req, res, next) {
     solutions: API_VERSION + '/self/solutions',
     infos: API_VERSION + '/self/infos',
     points: API_VERSION + '/self/points',
+    prestige: API_VERSION + '/self/prestige',
     workpackage: API_VERSION + '/self/workpackage'
   });
 });
@@ -99,28 +100,51 @@ router.get('/self/points', function(req, res, next) {
 
 });
 
+// Aktueller Ruf-/Prestige-Wert
+router.get('/self/prestige', function(req, res, next) {
+
+  var user = req.user;
+  user.getPrestige(function(err, prestige) {
+    if(err) return next(err);
+    res.json({prestige: prestige});
+  });
+
+});
+
 // Die aktuelle Arbeitspaketsituation zurückliefern
 router.get('/self/workpackage', function(req, res, next) {
 
   var user = req.user;
-  res.json({
-    tasks: {
-      done: user.tasksDone,
-      todo: user.tasksToDo
-    },
-    infos: {
-      done: user.infosDone,
-      todo: user.infosToDo
-    },
-    solutions: {
-      done: user.solutionsDone,
-      todo: user.solutionsToDo
-    },
-    ratings: {
-      done: user.ratingsDone,
-      todo: user.ratingsToDo
-    }
+
+  // Admins haben keine Packages
+  if(user.isAdmin()) {
+    var err = new Error('Als Admin hast man kein Arbeitspaket. Du kannst ungehindert Inhalte erstellen');
+    err.status = 404;
+    return next(err);
+  }
+
+  user.getPackage(function(err, p) {
+    if(err) return next(err);
+    res.json({
+      tasks: {
+        done: p.tasksDone,
+        todo: p.tasksToDo
+      },
+      infos: {
+        done: p.infosDone,
+        todo: p.infosToDo
+      },
+      solutions: {
+        done: p.solutionsDone,
+        todo: p.solutionsToDo
+      },
+      ratings: {
+        done: p.ratingsDone,
+        todo: p.ratingsToDo
+      }
+    });
   });
+
 
 });
 

@@ -4,30 +4,36 @@
  * @file Basisprototyp für alle weiteren Datenmodelle.
  */
 
-var moment = require('moment');
-var config = require('../config/config');
-var neo4j = require('neo4j');
-
-
-var db = new neo4j.GraphDatabase({
-  url: config.NEO4J_URL
-});
-
 /**
  * @function Konstruktor
  * @constructs
  * @param {object} _node Das Ergebnisobjekt der Datenbankabfrage, welches die Nutzdaten der Node enthält.
  */
 var Node = module.exports = function Node(_node) {
+
+  var self = this;
+
   // Speichern der Node als Instanzvariable
   // Dadurch werden alle Labels und Properties aus der Datenbank in diesem Objekt gespeichert
   this.labels = _node.labels;
   this.properties = _node.properties;
 
-  this.properties.status = this.isActive() ? 'active' : 'inactive';
+  // Alle Nodes (aber vor allem die Content-Nodes A, L, I) können zwischen 3 Stati wechseln
+  // `active` sind alle Nodes standardmäßig, quasi Normalfall
+  // `unfinished` sind alle Aufgaben, Lösungen und Infos die nicht expliziert finialisiert wurden
+  // `inactive` sind alle deaktivierten Inhalte
+  this.properties.status = 'active';
+  if(!this.isFinished()) this.properties.status = 'unfinished';
+  if(!this.isActive()) this.properties.status = 'inactive';
 };
 
-var Comment = require('./comment');
+var moment = require('moment');
+var config = require('../config/config');
+var neo4j = require('neo4j');
+
+var db = new neo4j.GraphDatabase({
+  url: config.NEO4J_URL
+});
 
 // Öffentliche Konstanten
 
@@ -42,85 +48,55 @@ Object.defineProperty(Node.prototype, 'uuid', {
   }
 });
 
+
 /**
- * @function Liefert alle Kommentare einer Node, falls welche bestehen
+ * @function Helferfunktion, die eine `unfinished` Aufgabe, Lösung oder Info in den `finished`-Status bringt
  */
-Node.prototype.getComments = function(callback) {
+Node.prototype.finalize = function(cb) {
 
   var self = this;
 
+  if(self.isFinished()) {
+    // falls die Node bereits `finished` ist -> Node einfach wieder zurückgeben
+    return cb(null, this);
+  }
+
   var query = [
-    'MATCH (n {uuid: {selfUUID}})<-[r:BELONGS_TO]-(c:Comment)',
-    'RETURN c'
+    'MATCH (n:Unfinished {uuid: {nodeUUID}})',
+    'REMOVE n:Unfinished'
   ].join('\n');
 
   var params = {
-    selfUUID: self.uuid
+    nodeUUID: self.uuid
   };
 
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    var comments = result.map(function(i) {
-      return new Comment(i.c);
-    });
-    callback(null, comments);
-  });
+  }, cb);
 
 };
 
-
 /**
- * @function Liefert alle Bewertungen einer Node, falls welche bestehen
+ * @function Helferfunktion, die überpürft, ob eine Node ein Rating ist
  */
-Node.prototype.getRating = function(callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (n {uuid: {selfUUID}})<-[r:RATES]-(u:User)',
-    'RETURN r, u'
-  ].join('\n');
-
-  var params = {
-    selfUUID: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-
-    var ratings = result.map(function(i) {
-      return {
-        r1: i.r.properties.r1,
-        r2: i.r.properties.r2,
-        r3: i.r.properties.r3,
-        r4: i.r.properties.r4,
-        r5: i.r.properties.r5,
-        comment: i.r.properties.comment,
-        author: i.u.properties.username,
-        authorUUID: i.u.properties.uuid
-      };
-    });
-
-    callback(null, {
-      ratings: ratings,
-      votes: result.length
-    });
-  });
-
+Node.prototype.isRating = function() {
+  return this.labels.indexOf('Rating') > -1;
 };
 
 /**
- * @function Helferfunktion die überprüft ob eine Node eine Aufgabe, Lösunge oder Information ist
+ * @function Helferfunktion, die überprüft, ob eine Node `unfinished` ist, sprich eine noch nicht öffentlich zugängliche Aufgabe, Lösung oder Info
+ */
+Node.prototype.isFinished = function() {
+  return this.labels.indexOf('Unfinished') === -1;
+};
+
+/**
+ * @function Helferfunktion die überprüft ob eine Node ein User oder eine Aufgabe, Lösung oder Information ist
  */
 Node.prototype.isToggable = function() {
 
-  return this.labels.indexOf('Task') > -1 || this.labels.indexOf('Solution') > -1 || this.labels.indexOf('Info') > -1;
+  return this.labels.indexOf('Task') > -1 || this.labels.indexOf('Solution') > -1 || this.labels.indexOf('Info') > -1 || this.labels.indexOf('User') > -1;
 
 };
 
@@ -205,16 +181,102 @@ Node.prototype.toggle = function(callback) {
 };
 
 /**
- * @function Vorlage für für die `getParentDegree` Funktion aller von `Node` abgeleiteten Prototypen
+ * @function Vorlage für für die `getParentTarget` Funktion aller von `Node` abgeleiteten Prototypen
  * Um später innerhalb der API feststellen zu können ob ein User Zugriff auf eine Ressource hat,
- * müssen alle Ressourcenprototypen die Methode `getParentDegree` implementieren. Um etwaige verpasste
+ * müssen alle Ressourcenprototypen die Methode `getParentTarget` implementieren. Um etwaige verpasste
  * Implementierungen abzufangen gibt es hier eine vererbte Implementierung, welche den Server
  * crashen lässt.
  */
-Node.prototype.getParentDegree = function() {
+Node.prototype.getParentTarget = function() {
 
-  var err = new Error('Dieser Prototyp hat die Funktion `getParentDegree` noch nicht implementiert. Crash!');
+  var err = new Error('Dieser Prototyp hat die Funktion `getParentTarget` noch nicht implementiert. Crash!');
   console.log(err, this);
   throw err;
+
+};
+
+
+/**
+ * @function Fügt von der aktuellen Node zum User {userUUID} eine [:GIVES_PRESTIGE {prestige: <integer>}] Relationship, durch die der jeweilige Nutzer Prestige erhält
+ * Der Einfachheit halber ist die Einsetzbarkeit dieser Funktion nicht auf bestimmte Datenmodelle begrenzt, sprich auch lernziele könnten Usern Punkte geben, was eigentlich keinen Sinn macht (BEWARE!?)
+ * @param {string} userUUID Der User der Prestige erhalten soll
+ * @param {object} properties Objekt mit Attributen für die Relation
+ */
+Node.prototype.givePrestigeTo = function(userUUID, properties, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}}), (n {uuid: {nodeUUID}})',
+    'CREATE UNIQUE (u)<-[:GIVES_PRESTIGE {properties}]-(n)'
+  ].join('\n');
+
+  var params = {
+    userUUID: userUUID,
+    properties: properties,
+    nodeUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, cb);
+
+};
+
+
+/**
+ * @function Fügt von der aktuellen Node zum User {userUUID} eine [:GIVES_POINTS {points: <integer>}] Relationship, durch die der jeweilige Nutzer Punkte erhält
+ * Der Einfachheit halber ist die Einsetzbarkeit dieser Funktion nicht auf bestimmte Datenmodelle begrenzt, sprich auch Lernziele könnten Usern Punkte geben, was eigentlich keinen Sinn macht (BEWARE!?)
+ * @param {string} userUUID Der User der Punkte erhalten soll
+ * @param {object} properties Objekt mit Attributen für die Relation
+ */
+Node.prototype.givePointsTo = function(userUUID, properties, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}}), (n {uuid: {nodeUUID}})',
+    'CREATE UNIQUE (u)<-[:GIVES_POINTS {properties}]-(n)'
+  ].join('\n');
+
+  var params = {
+    userUUID: userUUID,
+    nodeUUID: self.uuid,
+    properties: properties
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, cb);
+
+};
+
+/**
+ * @function Fügt von der aktuellen Node zum User {userUUID} eine [:COSTS_POINTS {points: <integer>}] Relationship, durch die der jeweilige Nutzer Punkte verliert
+ * Der Einfachheit halber ist die Einsetzbarkeit dieser Funktion nicht auf bestimmte Datenmodelle begrenzt, sprich auch Lernziel könnten Usern Punkte kosten, was eigentlich keinen  Sinn macht (BEWARE!?)
+ * @param {string} userUUID Der User der Punkte bezahlen soll
+ * @param {object} properties Objekten mit Attributen für die Relation
+ */
+Node.prototype.takePointsFrom = function(userUUID, properties, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}}), (n {uuid: {nodeUUID}})',
+    'CREATE UNIQUE (u)<-[:COSTS_POINTS {properties}]-(n)'
+  ].join('\n');
+
+  var params = {
+    userUUID: userUUID,
+    nodeUUID: self.uuid,
+    properties: properties
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, cb);
 
 };

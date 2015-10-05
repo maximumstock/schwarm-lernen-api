@@ -9,11 +9,11 @@ var router = express.Router();
 var config = require('../../config/config');
 var helper = require('./helper/middleware');
 var auth = require('./auth/auth');
+var async = require('async');
 
 var Target = require('../../models/target');
 var Info = require('../../models/info');
 var Task = require('../../models/task');
-var Comment = require('../../models/comment');
 var Solution = require('../../models/solution');
 var Rating = require('../../models/rating');
 
@@ -34,104 +34,110 @@ router.get('/tasks/:taskUUID', helper.prefetchTask, auth.restricted, function(re
 });
 
 // Gibt Bewertung der Aufgabe zurück
+router.get('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, function(req, res, next) {
+
+  var task = req._task;
+  var user = req.user;
+
+  task.getRatings(function(err, ratings) {
+    if(err) return next(err);
+    ratings.forEach(function(r) {
+      r.addMetadata(API_VERSION);
+    });
+    res.json(ratings);
+  });
+
+});
+
+// Gibt eigene Bewertung für die Aufgabe zurück, falls eine existiert
 router.get('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, function(req, res, next) {
 
   var task = req._task;
   var user = req.user;
 
-  task.getRating(function(err, rating) {
+  user.getMyRatingFor(task.uuid, function(err, myrating) {
     if(err) return next(err);
-    user.getMyRatingFor(task.uuid, function(err, myrating) {
-      if(err) return next(err);
-      rating.myRating = myrating;
-      res.json(rating);
-    });
-  });
-
-});
-
-// Gibt Kommentare zu der Aufgabe zurück
-router.get('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, function(req, res, next) {
-
-  var task = req._task;
-  task.getComments(function(err, comments) {
-    if(err) return next(err);
-    comments.forEach(function(i) {
-      i.addMetadata(API_VERSION);
-    });
-    res.json(comments);
+    myrating.addMetadata(API_VERSION);
+    res.json(myrating);
   });
 
 });
 
 // Fügt Rating hinzu
-router.post('/tasks/:taskUUID/rating', helper.prefetchTask, auth.restricted, helper.prefetchConfig, function(req, res, next) {
+router.post('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, helper.prefetchConfig, helper.prefetchPackage, function(req, res, next) {
 
-  validator
-    .validate(Rating.VALIDATION_RULES, req.body)
-    .then(function() {
+  var user = req.user;
+  var config = req._config;
+  var pack = req._package;
+  var task = req._task;
 
-      var user = req.user;
-      var config = req._config;
-
-      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
-      // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
-      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
-      // falls > 0: Einstellung möglich
-      if(user.ratingsToDo !== 0) {
-
-        // überprüfe ob der Nutzer noch genug Punkte hat
-        user.hasPoints(config.ratingCost, function(err, heDoes) {
-          if(err) return next(err);
-          if(!heDoes) {
-            err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
-            err.status = 409;
-            err.name = 'MissingPoints';
-            return next(err);
-          } else {
-
-            user.rate(req.params.taskUUID, req.body, config.ratePoints, config.rateCost, config.rateMultiplier, function(err, result) {
-              if(err) return next(err);
-              res.status(201).json({success: true});
-
-              user.didWorkOnPackage({tasks: 0, infos: 0, solutions: 0, ratings: 1}, config, function(err, result) {
-                if(err) console.error(err);
-              });
-            });
-          }
-        });
-
-      } else {
-        // Nutzer muss erst Paket abarbeiten
-        var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
-        err.status = 409;
-        err.name = 'WorkPackageNotDone';
-        res.json(err);
+  // eigentliche Funktion die die Bewertung erstellt, Punkte verteilt, etc.
+  function create() {
+    Rating.create(req.body, user.uuid, task.uuid, function(err, rating) {
+      if(err) return next(err);
+      rating.addMetadata(API_VERSION);
+      // Admins brauchen keine Punkte, etc
+      if(user.isAdmin()) {
+        return res.status(201).json(rating);
       }
 
-    })
-    .catch(function(errors) {
-      return next(errors);
+      // Arbeitspaket aktualisieren
+      // Punkte an den Ersteller der Bewertung verteilen
+      // Punkte vom Ersteller der Bewertung abziehen
+      // Punkte an den Ersteller des bewerteten Inhalts verteilen
+      async.parallel([
+        function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
+        function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
+        function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
+        function(_cb) { rating.givePointsTo(task.author, {points: rating.getRating().avg, prestige: user.prestige}, _cb); }
+      ], function(errors, results) {
+        if(errors) next(errors);
+        return res.status(201).json({success: true});
+      });
     });
-
-});
-
-// Fügt Kommentar hinzu
-router.post('/tasks/:taskUUID/comments', helper.prefetchTask, auth.restricted, function(req, res, next) {
-
-  req.checkBody('comment', 'Inhalt des Kommentars fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
   }
 
-  Comment.create(req.body, req.params.taskUUID, req.user.uuid, function(err, comment) {
-    if(err) return next(err);
-    comment.addMetadata(API_VERSION);
-    res.status(201).json(comment);
-  });
+  // Admins dürfen sowieso
+  if(user.isAdmin()) {
+    create();
+  } else {
+    // der User sollte seine eigenen Inhalte nicht bewerten dürfen
+    user.hasCreated(task.uuid, function(err, hasCreated) {
+      if(err) return next(err);
+      if(hasCreated) {
+        err = new Error('Du darfst nicht deine eigenen Inhalte bewerten.');
+        err.status = 409;
+        return next(err);
+      }
+
+      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
+      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+      if(user.ratingsToDo === 0) {
+        // Nutzer muss erst Paket abarbeiten
+        err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
+        err.status = 409;
+        err.name = 'WorkPackageNotDone';
+        return next(err);
+      }
+      // falls > 0: Einstellung möglich
+      // überprüfe ob der Nutzer noch genug Punkte hat
+      user.hasPoints(config.ratingCost, function(err, heDoes) {
+        if(err) return next(err);
+        if(!heDoes) {
+          err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
+          err.status = 409;
+          err.name = 'MissingPoints';
+          return next(err);
+        }
+
+        create();
+
+      });
+    });
+  }
 
 });
+
 
 // Alle Lösungen für eine Aufgabe
 router.get('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, function(req, res, next) {
@@ -163,7 +169,7 @@ router.get('/tasks/:taskUUID/solution', helper.prefetchTask, auth.restricted, fu
 });
 
 // Neue Lösung für Aufgabe
-router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, helper.prefetchConfig, function(req, res, next) {
+router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, helper.prefetchConfig, helper.prefetchPackage, function(req, res, next) {
 
   req.checkBody('description', 'Inhalt der Lösung fehlt').notEmpty();
   var errors = req.validationErrors();
@@ -174,39 +180,82 @@ router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, 
   var task = req._task;
   var config = req._config;
   var user = req.user;
+  var pack = req._package;
 
-  // überprüfe ob der Nutzer noch Aufgaben erstellen darf
-  // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
-  // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
-  // falls > 0: Einstellung möglich
-  if(user.solutionsToDo !== 0) {
-
-    // überprüfe ob der Nutzer noch genug Punkte hat
-    user.hasPoints(config.solutionCost, function(err, heDoes) {
+  // eigentliche Funktion die Lösung erstellt und Punktevergabe, etc. ausführt
+  function create() {
+    Solution.create(req.body, task.uuid, req.user.uuid, function(err, solution) {
       if(err) return next(err);
-      if(!heDoes) {
-        err = new Error('Du hast nicht genug Punkte um eine Lösung abzugeben');
+      solution.addMetadata(API_VERSION);
+
+      // Admins brauchen keine Punkte, etc
+      if(user.isAdmin()) {
+        return res.status(201).json(solution);
+      }
+
+      // arbeitspaket aktualisieren
+      // Punkte an den User verteilen, der die Lösung eingestellt hat
+      // Punkte vom User als Gebühr abzwicken, der die Lösung eingestellt hat
+      async.parallel([
+        function(_cb) {pack.updatePackage({solutions: 1}, config, _cb);},
+        function(_cb) {solution.givePointsTo(user.uuid, config.solutionPoints, _cb);},
+        function(_cb) {solution.takePointsFrom(user.uuid, config.solutionCost, _cb);}
+      ], function(errors, results) {
+        if(errors) return next(errors);
+        res.json(solution);
+      });
+    });
+  }
+
+  // Admins dürfen sowieso
+  if(user.isAdmin()) {
+    create();
+  } else {
+    // für normale User:
+    // überprüfe ob der Nutzer noch Lösungen erstellen darf
+    // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+    // falls > 0: Einstellung möglich
+    if(pack.solutionsToDo === 0) {
+      // Nutzer muss erst Paket abarbeiten
+      var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Lösungen erstellen darfst');
+      err.status = 409;
+      err.name = 'WorkPackageNotDone';
+      res.json(err);
+    }
+
+    // der Nutzer sollte nicht seine eigenen Aufgaben lösen
+    user.hasCreated(task.uuid, function(err, heHas) {
+      if(err) return next(err);
+      if(heHas) {
+        err = new Error('Du darfst nicht deine eigenen Aufgaben lösen');
         err.status = 409;
-        err.name = 'MissingPoints';
         return next(err);
       } else {
-        Solution.create(req.body, task.uuid, req.user.uuid, config.solutionPoints, config.solutionCost, function(err, solution) {
+        // überprüfe ob der Nutzer schon eine Lösung für diese Aufgabe hat
+        user.hasSolved(task.uuid, function(err, hasSolved) {
           if(err) return next(err);
-          solution.addMetadata(API_VERSION);
-          res.json(solution);
-          user.didWorkOnPackage({tasks: 0, infos: 0, solutions: 1, ratings: 0}, config, function(err, result) {
-            if(err) console.error(err);
-          });
+          if(hasSolved) {
+            err = new Error('Du hast diese Aufgabe bereits gelöst');
+            err.status = 409;
+            return next(err);
+          } else {
+            // überprüfe ob der Nutzer noch genug Punkte hat
+            user.hasPoints(config.solutionCost, function(err, heDoes) {
+              if(err) return next(err);
+              if(!heDoes) {
+                err = new Error('Du hast nicht genug Punkte um eine Lösung abzugeben');
+                err.status = 409;
+                err.name = 'MissingPoints';
+                return next(err);
+              } else {
+                create();
+              }
+            });
+          }
         });
       }
     });
 
-  } else {
-    // Nutzer muss erst Paket abarbeiten
-    var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Lösungen erstellen darfst');
-    err.status = 409;
-    err.name = 'WorkPackageNotDone';
-    res.json(err);
   }
 
 });
@@ -229,16 +278,74 @@ router.get('/tasks/:taskUUID/target', helper.prefetchTask, auth.restricted, func
 **************************************************/
 
 // Toggled den Status der Ressource zu inaktiv/aktiv
-router.put('/tasks/:taskUUID/status', helper.prefetchTask, auth.adminOnly, function(req, res, next) {
+router.put('/tasks/:taskUUID/status', helper.prefetchTask, auth.adminOnly, helper.prefetchConfig, helper.prefetchPackage, function(req, res, next) {
 
   var task = req._task;
+  var pack = req._package;
+  var config = req._config;
+
   task.toggle(function(err, result) {
     if(err) return next(err);
-    Task.get(task.uuid, function(err, t) {
+    // ACHTUNG: das obige task ist nocht die alte Version
+    // falls die Node vorher aktiv war, müssen zusätzliche Aufgaben vom User in dem aktuellen Arbeitspaket verrichtet werden
+    // Admins haben keine Packages
+    if(req.user.isAdmin()) {
+      return res.json({success: true});
+    }
+
+    var update = {};
+    if(task.isActive()) {
+      update.tasks = -1; // '-' damit intern hochgezählt wird
+    } else {
+      // da die Aufgabe vorher `inactive` war, muss er jetzt eine Aufgabe weniger bearbeiten
+      update.tasks = 1; // runtergezählt
+    }
+    pack.updatePackage(update, config, function(err, result) {
       if(err) return next(err);
-      t.addMetadata(API_VERSION);
-      res.json(t);
+      res.json({success: true});
     });
+  });
+
+});
+
+
+/**************************************************
+              AUTHOR ONLY ROUTES
+**************************************************/
+
+// Finalisiert die Aufgabe und macht sie öffentlich
+router.put('/tasks/:taskUUID/submit', helper.prefetchTask, auth.authorOnly, function(req, res, next) {
+
+  var task = req._task;
+  var user = req.user;
+
+  task.finalize(function(err, result) {
+    if(err) return next(err);
+    Task.get(task.uuid, function(err, task) {
+      if(err) return next(err);
+      task.addMetadata(API_VERSION);
+      res.json(task);
+    });
+  });
+
+});
+
+// Aktualisiert die Aufgabe
+router.put('/tasks/:taskUUID', helper.prefetchTask, auth.authorOnly, function(req, res, next) {
+
+  var task = req._task;
+
+  if(task.isFinished()) {
+    var err = new Error('Diese Aufgabe wurde bereits abgegeben. Du kannst sie nicht mehr verändern.');
+    err.status = 409;
+    err.name = 'AlreadySubmitted';
+    return next(err);
+  }
+
+  task.patch(req.body, function(err, ntask) {
+    if(err) return next(err);
+    ntask.addMetadata(API_VERSION);
+    res.json(ntask);
   });
 
 });

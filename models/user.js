@@ -27,7 +27,8 @@ var Node = require('./node');
 var Task = require('./task');
 var Info = require('./info');
 var Solution = require('./solution');
-var Comment = require('./comment');
+var Package = require('./package');
+var Rating = require('./rating');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -45,13 +46,6 @@ User.VALIDATION_RULES = {
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
-//Propertydefinition für die UUID der Node ist
-Object.defineProperty(User.prototype, 'uuid', {
-  get: function () {
-    return this.properties.uuid;
-  }
-});
-
 // Propertydefinition für den Name des Users
 Object.defineProperty(User.prototype, 'username', {
   get: function () {
@@ -63,6 +57,12 @@ Object.defineProperty(User.prototype, 'username', {
 Object.defineProperty(User.prototype, 'password', {
   get: function () {
     return this.properties.password;
+  }
+});
+
+Object.defineProperty(User.prototype, 'prestige', {
+  get: function() {
+    return this.properties.prestige || 1; // 1 ist Default Wert
   }
 });
 
@@ -247,6 +247,13 @@ User.generate = function(number, callback) {
     return callback(err);
   }
 
+  if(number > 50) {
+    var err2 = new Error('Es können maximal 50 Accounts gleichzeitig angelegt werden');
+    err2.status = 400;
+    err2.name = 'N00bUser';
+    return callback(err2);
+  }
+
   var accounts = [];
   for(var i = 0; i < number; i++) {
     accounts.push({
@@ -310,7 +317,7 @@ User.create = function (properties, callback) {
         } else {
 
           // User erstellen
-          properties.createdAt = parseInt(moment().format('X'));
+          properties.createdAt = moment().format('X');
 
           var query = [
             'CREATE (u:User {properties})',
@@ -355,33 +362,6 @@ User.create = function (properties, callback) {
 User.prototype.isAdmin = function () {
 
   return this.labels.indexOf('Admin') > -1;
-
-};
-
-/**
- * @function Gibt alle Kommentare dieses Users zurück
- */
-User.prototype.getComments = function (callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (u:User {uuid: {uuid}}-[:CREATED]->(c:Comment)',
-    'RETURN c'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function (err, result) {
-    if (err) return callback(err);
-    var c = new Comment(result[0].c);
-    callback(null, c);
-  });
 
 };
 
@@ -576,88 +556,62 @@ User.prototype.getPoints = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {userUUID}})',
-    'OPTIONAL MATCH (u)-[r:CREATED]-(n) WHERE NOT n:Inactive',
-    'OPTIONAL MATCH (u)-[r2:RATES]-(n2) WHERE NOT n2:Inactive',
-    'OPTIONAL MATCH (u)-[:CREATED]->(n3)<-[r3:RATES]-(u2:User) WHERE NOT n3:Inactive',
-    'RETURN r,n,r2,r3'
+    'MATCH (u:User {uuid: {userUUID}})<-[r:GIVES_POINTS]-(n) WHERE NOT n:Inactive',
+    'RETURN collect(r) as r'
+  ].join('\n');
+
+  var query2 = [
+    'MATCH (u:User {uuid: {userUUID}})<-[r:COSTS_POINTS]-(n) WHERE NOT n:Inactive',
+    'RETURN collect(r) as r'
   ].join('\n');
 
   var params = {
     userUUID: self.uuid
   };
 
-  db.cypher({
+  db.cypher([{
     query: query,
     params: params
-  }, function(err, result) {
+  }, {
+    query: query2,
+    params: params
+  }], function(err, result) {
     if(err) return callback(err);
 
     var points = {
-      tasks: {spent: 0, gained: 0},
-      solutions: {spent: 0, gained: 0},
-      infos: {spent: 0, gained: 0},
-      ratings: {spent: 0, gained: 0},
-      total: {spent: 0, gained: 0}
+      spent: 0,
+      gained: 0
     };
 
-    result.forEach(function(i) {
+    var gains = result[0][0].r, costs = result[1][0].r;
 
-      var gain = 0;
-      var cost = 0;
-
-      // Punkte kommen entweder vom Erstellen von Content -> i.r2 ist NULL
-      if(i.n && i.r) {
-        var labels = i.n.labels;
-
-        gain = parseInt(i.r.properties.gainedPoints);
-        cost = parseInt(i.r.properties.spentPoints);
-
-        points.total.gained += gain;
-        points.total.spent += cost;
-
-        if(labels.indexOf('Task') > -1) {
-          points.tasks.gained += gain;
-          points.tasks.spent += cost;
-        } else if(labels.indexOf('Solution') > -1) {
-          points.solutions.gained += gain;
-          points.solutions.spent += cost;
-        } else if(labels.indexOf('Info') > -1){
-          points.infos.gained += gain;
-          points.infos.spent += cost;
-        }
-
-        // oder von den Bewertungen anderer des eigenen Contents
-        if(i.r3) {
-          var rating = i.r3.properties;
-          gain = (rating.r1 + rating.r2 + rating.r3 + rating.r4 + rating.r5) / 5 * rating.rateMultiplier;
-          points.total.gained += gain;
-
-          if(labels.indexOf('Task') > -1) {
-            points.tasks.gained += gain;
-          } else if(labels.indexOf('Solution') > -1) {
-            points.solutions.gained += gain;
-          } else if(labels.indexOf('Info') > -1){
-            points.infos.gained += gain;
-          }
-
-        }
+    // gesammelte Punkte zusammenzählen
+    var sum = 0, num = 0, prestigeSum = 0;
+    for(var i = 0; i < gains.length; i++) {
+      // fürs erste werden nur die :GIVES_POINTS Relationen beachtet, welche von Bewertungen eigener Inhalte stammen
+      // alle anderen :GIVES_POINTS Relationen (z.B. für das Einstellen von Aufgaben), können ohne Prestigewert nicht so einfach verrechnet werden
+      // Rechenbeispiel: Bei zwei Bewertungen (3 Punkte bei 4 Prestige und 2 Punkte bei 5 Prestige): (3P * 4R + 2P * 5R) / ((4R +5R) * 2)
+      if(gains[i].properties.points && gains[i].properties.prestige) {
+        num++;
+        prestigeSum += gains[i].properties.prestige;
+        sum += gains[i].properties.points * gains[i].properties.prestige;
       }
+    }
+    points.gained = (sum / (prestigeSum * num)) || 0;
 
-      // oder Punkte kommen von gegebenen Bewertungen -> dann ist i.r & i.n NULL
-      if(i.r2) {
-        gain = parseInt(i.r2.properties.gainedPoints);
-        cost = parseInt(i.r2.properties.spentPoints);
-
-        points.ratings.gained += gain;
-        points.ratings.spent += cost;
-
-        points.total.gained += gain;
-        points.total.spent += cost;
+    // ausgegebene Punkte zusammenzählen
+    sum = 0; num = 0;
+    for(i = 0; i < costs.length; i++) {
+      // hier können wir alle Relationen nehmen, da Punkte immer nur linear abgezogen werden
+      // entgegen der :GIVES_POINTS Relationen müssen wir diese auch jetzt schon beachten, da man sonst immer genug Punkte für alles hätte
+      if(costs[i].properties.points) {
+        num++;
+        sum += costs[i].properties.points;
       }
-    });
+    }
+    points.spent = (sum / num) || 0;
+    return callback(null, points);
 
-    callback(null, points);
   });
 
 };
@@ -668,12 +622,11 @@ User.prototype.getPoints = function(callback) {
  */
 User.prototype.hasPoints = function(amount, cb) {
 
-  if(amount === 0) return cb(null, true);
+  if(amount === 0 || this.isAdmin()) return cb(null, true);
 
   this.getPoints(function(err, points) {
     if(err) return cb(err);
-    var total = points.total.gained - points.total.spent;
-    console.log(total);
+    var total = points.gained - points.spent;
     if(total < amount) {
       return cb(null, false);
     } else {
@@ -713,61 +666,28 @@ User.prototype.hasCreated = function(nodeUUID, callback) {
 };
 
 /**
- * @function Bewertet die Node {nodeUUID} mit der Bewertung {rating}
- * Falls bereits eine Bewertung besteht wird sie überschrieben
- * @param {string} nodeUUID UUID der zu bewertenden Node
- * @param {object} rating Objekt mit mehreren Bewertungen (momentan r1-r5) als Integer (1-5)
- * @param {integer} gainedPoints Anzahl der Punkte die der Ersteller der Bewertung erhalten soll
- * @param {integer} spentPoints Anzahl der Punkte die die Bewertung dem Ersteller kosten soll
- * @param {integer} rateMultiplier Multiplikator für die aktuelle Bewertung
+ * @function Überprüft ob ein User eine Lösung für {taskUUID} eingestellt hat oder nicht
  */
-User.prototype.rate = function(nodeUUID, rating, gainedPoints, spentPoints, rateMultiplier, callback) {
+User.prototype.hasSolved = function(taskUUID, cb) {
 
   var self = this;
 
-  for(var k in rating) {
-    if(rating[k] < 1 || rating[k] > 5) {
-      var err = new Error('Die Bewertung muss zwischen 1 und 5 liegen');
-      err.status = 409;
-      return callback(err);
-    }
-  }
+  var query = [
+    'MATCH (t:Task {uuid: {taskUUID}})<-[:SOLVES]-(s:Solution)<-[:CREATED]-(u:User {uuid: {userUUID}})',
+    'RETURN s'
+  ].join('\n');
 
-  // Überprüfe ob der Nutzer die Node selbst erstellt hat, falls ja sollte er sie nicht bewerten können
-  this.hasCreated(nodeUUID, function(err, result) {
-    if(err) return callback(err);
-    if(result) {
-      // Fehler
-      err = new Error('Du kannst nicht deine eigenen Beiträge bewerten');
-      err.status = 409;
-      err.name = 'CheekyUser';
-      return callback(err);
-    } else {
+  var params = {
+    taskUUID: taskUUID,
+    userUUID: self.uuid
+  };
 
-      // User darf bewerten
-      var query = [
-        'MATCH (u:User {uuid: {userUUID}}), (n {uuid: {nodeUUID}})',
-        'MERGE (u)-[r:RATES]->(n)',
-        'ON CREATE SET r = {rating}, r.gainedPoints = {gainedPoints}, r.spentPoints = {spentPoints}, r.rateMultiplier = {rateMultiplier}',
-        'ON MATCH SET r = {rating}'
-      ].join('\n');
-
-      var params = {
-        nodeUUID: nodeUUID,
-        userUUID: self.uuid,
-        rating: rating,
-        gainedPoints: gainedPoints,
-        spentPoints: spentPoints,
-        rateMultiplier: rateMultiplier
-      };
-
-      db.cypher({
-        query: query,
-        params: params
-      }, function(err, result) {
-        return callback(err, true);
-      });
-    }
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    return cb(null, result.length === 0 ? false : true);
   });
 
 };
@@ -800,28 +720,21 @@ User.prototype.updateLoginTimestamp = function(cb) {
 };
 
 /**
- * @function Erneuert die Einstellungslimits (Aufgaben, Infos, Bewertungen) des Nutzers
- * @param {object} config Das Konfigurationsobjekt des betreffenden Studiengangs mit den Werten für
- * taskShare, infoShare, rateShare
+ * @function Liefert das aktuelle Arbeitspaket des Nutzers
+ * @returns Das aktuelle Package als Package-Objekt, falls noch keins existiert null
  */
-User.prototype.refreshPackage = function(config, cb) {
+User.prototype.getPackage = function(cb) {
 
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {userUUID}})',
-    'SET u.tasksToDo = {tasksToDo}, u.infosToDo = {infosToDo}, u.solutionsToDo = {solutionsToDo}, u.ratingsToDo = {ratingsToDo}, u.ratingsDone = 0, u.tasksDone = 0, u.infosDone = 0, u.solutionsDone = 0',
-    'RETURN u'
+    'MATCH (u:User {uuid: {userUUID}})<-[:BELONGS_TO]-(p:Package)',
+    'WHERE NOT p:Finished',
+    'RETURN p'
   ].join('\n');
 
-  // falls für Aufgaben, Lösungen, Infos oder Bewertungen keine maximale Anzahl gegeben ist, wird das Limit des Pakets auf -1 gesetzt
-  // mit einem negativen Wert kann später der Fall behandelt werden, dass es für diese Aktion kein Limit/keine Mindestanzahl gibt
   var params = {
-    userUUID: self.uuid,
-    tasksToDo: Math.round(config.packageSize * config.taskShare) === 0 ? -1 : Math.round(config.packageSize * config.taskShare),
-    infosToDo: Math.round(config.packageSize * config.infoShare) === 0 ? -1 : Math.round(config.packageSize * config.infoShare),
-    solutionsToDo: Math.round(config.packageSize * config.solutionShare) === 0 ? -1 : Math.round(config.packageSize * config.solutionShare),
-    ratingsToDo: Math.round(config.packageSize * config.rateShare) === 0 ? -1 : Math.round(config.packageSize * config.rateShare)
+    userUUID: self.uuid
   };
 
   db.cypher({
@@ -829,7 +742,42 @@ User.prototype.refreshPackage = function(config, cb) {
     params: params
   }, function(err, result) {
     if(err) return cb(err);
-    cb(null, new User(result[0].u));
+    cb(null, new Package(result[0].p));
+  });
+
+};
+
+/**
+ * @function Liefert den aktuellen Prestige Wert des Nutzers
+ */
+User.prototype.getPrestige = function(cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})<-[r:GIVES_PRESTIGE]-()',
+    'RETURN r'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    var i = 1, prestigePoints = 2.5; // default wert
+    // alle GIVES_PRESTIGE Relationships aufaddieren und den Durchschnitt bilden
+    // der Prestigewert der Bewerter wird hierfür nicht benötigt, befindet sich aber auch in der Relation
+    result.forEach(function(r) {
+      i++;
+      prestigePoints += r.r.properties.points;
+    });
+    // jetzt noch Durschnitt bilden
+    var prestige = prestigePoints / i;
+    return cb(null, prestige);
   });
 
 };
@@ -843,8 +791,8 @@ User.prototype.getMyRatingFor = function(nodeUUID, cb) {
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {userUUID}})-[r:RATES]->(n {uuid: {nodeUUID}})',
-    'RETURN r'
+    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(rating:Rating)-[:RATES]->(n {uuid: {nodeUUID}})',
+    'RETURN rating'
   ].join('\n');
 
   var params = {
@@ -858,80 +806,12 @@ User.prototype.getMyRatingFor = function(nodeUUID, cb) {
   }, function(err, result) {
     if(err) return cb(err);
     if(result.length === 0) {
-      return cb(null, null);
-    } else {
-      return cb(null, result[0].r.properties);
+      err = new Error('Du hast noch keine Bewertung für diesen Inhalt');
+      err.status = 404;
+      err.name = 'RatingNotFound';
+      return cb(err);
     }
-  });
-
-};
-
-/**
- * @function Helferfunktion die überprüft ob das aktuelle Arbeitspaket abgearbeitet wurde
- */
-User.prototype.hasFinishedPackage = function() {
-
-  var self = this;
-
-  return self.tasksToDo === 0 && self.infosToDo === 0 && self.solutionsToDo === 0 && self.ratingsToDo === 0;
-
-};
-
-/**
- * @function Aktualisiert den Arbeitspaketstatus des Nutzers und weist gegebenenfalls ein neues Arbeitspaket zu
- * Mit einem Aufruf dieser Funktionen kann lediglich eine Arbeitspaket-Aktion registriert werden. Falls also
- * der Nutzer 2 Aufgaben einstellt obwohl das Arbeitspaket nur noch 1 Aufgabe verlangt und der Nutzer vor
- * Beendigung des aktuellen Pakets noch anderweitige Punkte abzuarbeiten hat, muss diese Funktion erneut aufgerufen werden.
- * @param {object} job Ein Objekt welches beschreibt was der Nutzer in der Zwischenzeit bearbeitet hat
- * @param {object} config Das Konfigurationsobjekt der jeweiligen Konfiguration für das ggf. neue Arbeitspaket
- */
-User.prototype.didWorkOnPackage = function(job, config, cb) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (u:User {uuid: {userUUID}})',
-    'SET u.tasksToDo = {tasksToDo}, u.infosToDo = {infosToDo}, u.ratingsToDo = {ratingsToDo}, u.solutionsToDo = {solutionsToDo}',
-    'RETURN u'
-  ].join('\n');
-
-  var params = self.properties; // Parameter einfach die Attribute des aktuellen Nutzers zuweisen damit später überschrieben werden kann was sich verändert
-  params.userUUID = self.uuid;
-
-  // je nachdem was "angekreuzt" wurde, muss das Arbeitspaket aktualisiert werden
-  // außerdem dürfen die Limits nicht auf -1 stehen, da dies der Fall ist, dass es auf dieser Aktion kein Limit/keine Mindestanzahl gibt
-
-  if(job.tasks && self.tasksToDo !== -1) {
-    params.tasksToDo = self.tasksToDo - 1;
-    params.tasksDone = params.taskDone + 1;
-  } else if(job.infos && self.infosToDo !== -1) {
-    params.infosToDo = self.infosToDo - 1;
-    params.infosDone = params.infosDone + 1;
-  } else if(job.solutions && self.solutionsToDo !== -1) {
-    params.solutionsToDo = self.solutionsToDo - 1;
-    params.solutionsDone = params.solutionsDone + 1;
-  } else if(job.ratings && self.ratingsToDo !== -1){
-    params.ratingsToDo = self.ratingsToDo - 1;
-    params.ratingsDone = params.ratingsDone + 1;
-  }
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return cb(err);
-    if(result.length === 0) {
-      console.error('User.didWorkOnPackage: user nichte gefunden, sollte nicht passieren, uuid:', self.uuid);
-    }
-    // Arbeitspaket wurde aktualisiert
-    var newUser = new User(result[0].u); // neues User-Objekt mit neuen Daten
-    if(newUser.hasFinishedPackage()) {
-      // neues Paket erstellen
-      newUser.refreshPackage(config, cb);
-    } else {
-      // das alte Paket des Users ist noch nicht abgearbeitet
-      return cb(null, null);
-    }
+    return cb(null, new Rating(result[0].rating));
   });
 
 };
@@ -943,7 +823,9 @@ User.prototype.didWorkOnPackage = function(job, config, cb) {
  */
 User.prototype.addMetadata = function (apiVersion) {
 
-  delete this.properties.password;
+  if(this.properties.password) {
+    delete this.properties.password;
+  }
 
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/users/' + encodeURIComponent(this.uuid);

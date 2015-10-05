@@ -16,7 +16,7 @@ Admins können alle Endpunkte ansprechen und sind zu allem berechtigt. Gewöhnli
 
 * `Public` - Nutzbar für jeden authentifizierten Benutzer und Admin
 * `AccessRestricted` - Nutzbar für jeden Nutzer, der für den jeweiligen Studiengang angemeldet ist, und Admin
-* `AuthorRestricted` - Nutzbar für den Autor der Resource und Admins (quasi ausschließlich für das Ändern und Löschen von selbst erstellten Aufgaben, Infos, Lösungen und Kommentaren
+* `AuthorOnly` - Nutzbar für den Autor der Resource und Admins (quasi ausschließlich für das Ändern und Löschen von selbst erstellten Aufgaben, Infos, Lösungen und Kommentaren
 * `AdminOnly` - Nur von Admins nutzbar
 
 Beim Anmelden werden `Username` und `Passwort` gegen ein [JSON Webtoken](https://en.wikipedia.org/wiki/JSON_Web_Token) ausgetauscht, welches den User authentifiziert. Dieses Token muss bei jedem Request (im HTTP Header unter "X-Access-Token") mitgeschickt werden. Ohne das Token kann ein User nicht authentifiziert und kein Request bearbeitet werden.
@@ -40,28 +40,31 @@ Alle Aufgaben, Infos und Lösungen haben einen Aktivitätsstatus, der als Proper
 nicht zur Erfüllung von Arbeitspaketen oder dem Gesamtkontostand eines Nutzers dazugezählt.
 
 ### Punktekonzept
-Jeder Benutzer sammelt beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch für das Bewerten von fremden Inhalten Punkte.
-Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte für die einzelnen Aktionen verdient und bezahlt werden.
+Jeder Benutzer sammelt <s>beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch</s> für das Bewerten von fremden Inhalten Punkte.
+Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <s>für die einzelnen Aktionen <s>verdient und bezahlt werden.
 
-### Bewertungskonzept
-Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet werden. Für das Bewerten von Inhalten bekommen sowohl die Bewertenden als auch die Bewerteten Nutzer Punkte. Siehe `Degrees/config` für weitere Informationen.
 
-### Studiengänge/Degrees
-* `GET /degrees` - Public - Alle Studiengänge
-* `GET /degrees/:degreeUUID` - Public - Studiengang mit der ID `:degreeUUID`
-* `GET /degrees/:degreeUUID/targets` - AccessRestricted - Alle Lernziele des Studiengangs `:degreeUUID`
-* `GET /degrees/:degreeUUID/users` - AccessRestricted - Alle User die Zugriff auf den Studiengang `:degreeUUID` haben
-* `GET /degrees/:degreeUUID/config` - AccessRestricted - Die Konfiguration des Studiengangs
-* `POST /degrees` - AdminOnly - Neuen Studiengang erstellen
-	* name - String, alphanumerisch - Name des neuen Studiengangs
-	* Eine Standardkonfiguration wird hierbei erstellt: siehe [hier](#defaultconfig)
-* `POST /degrees/:degreeUUID/targets` - AdminOnly - Ein neues Lernziel an den Studiengang `:degreeUUID` hängen
-	* name - String - Name des neuen Lernziels
-* `PUT /degrees/:degreeUUID/users` - AdminOnly - Generierung von Username-Passwort-Kombinationen, die Zugriff auf den Studiengang `:degreeUUID` haben
-	* amount - Integer - Anzahl der zu generierenden Accounts
-* `PUT /degrees/:degreeUUID` - AdminOnly - Studiengang mit der ID `:degreeUUID` aktualisieren
-* `PUT /degrees/:degreeUUID/config` - AdminOnly - Konfiguration des Studiengangs `:degreeUUID` aktualisieren
-* `DELETE /degrees/:degreeUUID` - AdminOnly - Studiengang mit der ID `:degreeUUID` löschen
+---
+### Lernziele/Targets
+* ***NEW*** `GET /targets` - Public - Liefert alle Hauptlernziele (`EntryTargets`)
+* `GET /targets/:targetUUID` - AccessRestricted - Ein bestimmtes Lernziel mit der ID `:targetUUID`
+* `GET /targets/:targetUUID/parent` - AccessRestricted - Die Vaternode des Lernziels
+* `GET /targets/:targetUUID/children` - AccessRestricted - Liefert alle Kind-Nodes des Lernziels `:targetUUID` sortiert nach **Tasks**, **Infos** und **Targets**
+* **NEW** `GET /targets/:targetUUID/config` - AccessRestricted - Liefert die Konfiguration des Lernziels bzw. die globale Konfiguration falls `:targetUUID` keine eigene Konfiguration hat
+* `GET /targets/:targetUUID/users` - AccessRestricted - Liefert Liste alle Nutzer die auf dieses Lernziel Zugriff haben. Falls `:targetUUID` kein Hauptlernziel/EntryTarget ist, wird momentan ein leeres Array zurückgeliefert, da die Zugriffssteuerung über das verantwortliche Hauptlernziel läuft
+* **NEW** `POST /targets` - AdminOnly - Erstellt ein neues Hauptlernziel
+	* name - String - Name des neuen Lernziels - Max. Länge 50 Zeichen
+* `POST /targets/:targetUUID/targets` - AdminOnly - Erstellt ein neues Lernziel unter dem Lernziel `:targetUUID`
+	* name - String - Name des neuen Lernziels - Max. Länge 50 Zeichen
+* `POST /targets/:targetUUID/tasks` - AccessRestricted - Erstellt eine neue Aufgabe unter dem Lernziel `:targetUUID`
+	* description - String - Inhalt der neuen Aufgabe - Max. Länge 2000 Zeichen
+* `POST /targets/:targetUUID/infos` - AccessRestricted - Erstellt eine neue Info unter dem Lernziel `:targetUUID`
+	* description - String - Inhalt der neuen Aufgabe
+* **NEW** `PUT /targets/:targetUUID` - AdminOnly - Aktualsiert das Lernziel mit der ID `:targetUUID`
+* **NEW** `PUT /targets/:targetUUID/users` - AdminOnly - Generiert neue Accounts die Zugriff auf `:targetUUID` erhalten
+	* amount - Integer - Anzahl an zu generierenden Usern - Max. 50 gleichzeitig
+* **NEW** `PUT /targets/:targetUUID/config` - AdminOnly - Aktualisiert die Konfiguration von `:targetUUID` (Parameter siehe [Standardkonfiguration](#defaultconfig))
+* `DELETE /targets/:targetUUID` - AdminOnly - Löscht das Lernziel mit der ID `:targetUUID`
 
 * <a name="defaultconfig">Standardkonfiguration</a>:
 	* packageSize - Integer - Gesamtgröße für neue Arbeitspakete - Default: 10
@@ -77,64 +80,53 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 	* infoCost - Integer - Anzahl der Punkte die das Einstellen einer Info kosten soll - Default: 0
 	* taskCost - Integer - Anzahl der Punkte die das Einstellen einer Aufgabe kosten soll - Default: 0
 	* rateCost - Integer - Anzahl der Punkte die das Bewerten von Inhalten kosten soll - Default: 0
-	* rateMultiplier - Integer - Multiplikator mit dem die durchschnittliche Bewertung von Inhalten verrechnet wird. Das Produkt wird auf die Gesamtpunktzahl der A/L/I addiert. - Default: 1
-
----
-### Lernziele/Targets
-* `GET /targets/:targetUUID` - AccessRestricted - Ein bestimmtes Lernziel mit der ID `:targetUUID`
-* `GET /targets/:targetUUID/parent` - AccessRestricted - Die Vaternode des Lernziels; entweder ein Studiengang oder ein anderes Lernziel
-* `GET /targets/:targetUUID/children` - AccessRestricted - Liefert alle Kind-Nodes des Lernziels `:targetUUID` sortiert nach **Tasks**, **Infos** und **Targets**
-* `POST /targets/:targetUUID/targets` - AdminOnly - Erstellt ein neues Lernziel unter dem Lernziel `:targetUUID`
-	* name - String - Name des neuen Lernziels
-* `POST /targets/:targetUUID/tasks` - AccessRestricted - Erstellt eine neue Aufgabe unter dem Lernziel `:targetUUID`
-	* description - String - Inhalt der neuen Aufgabe
-* `POST /targets/:targetUUID/infos` - AccessRestricted - Erstellt eine neue Info unter dem Lernziel `:targetUUID`
-	* description - String - Inhalt der neuen Aufgabe
-* `PUT /targets/:targetUUID` - AdminOnly - Aktualsiert das Lernziel mit der ID `:targetUUID`
-* `DELETE /targets/:targetUUID` - AdminOnly - Löscht das Lernziel mit der ID `:targetUUID`
+	* *IGNORE* rateMultiplier - Integer - Multiplikator mit dem die durchschnittliche Bewertung von Inhalten verrechnet wird. Das Produkt wird auf die Gesamtpunktzahl der A/L/I addiert. - Default: 1
 
 ---
 ### Aufgaben/Tasks
 * `GET /tasks/:taskUUID` - AccessRestricted - Liefert die Aufgabe `:taskUUID`
 * `GET /tasks/:taskUUID/target` - AccessRestricted - Lernziel an dem die Aufgabe `:taskUUID` hängt
-* `GET /tasks/:taskUUID/rating` - AccessRestricted - Liefert alle Bewertungen der Aufgabe `:taskUUID` und die des aktuellen Users, falls vorhanden
-* `GET /tasks/:taskUUID/solution` - AccessRestricted - Liefert die eine bestehende Lösung für den aktuellen User falls eine besteht
-* `GET /tasks/:taskUUID/comments` - AccessRestricted - Liefert die Kommentare zur Aufgabe `:taskUUID`
+* `GET /tasks/:taskUUID/ratings` - AccessRestricted - Liefert alle Bewertungen der Aufgabe `:taskUUID`
+* **NEW** `GET /tasks/:taskUUID/rating` - AccessRestricted - Liefert die eigene Bewertung für die Aufgabe `:taskUUID`, falls keine besteht **404**
+* `GET /tasks/:taskUUID/solution` - AccessRestricted - Liefert die eine bestehende Lösung für den aktuellen User, falls keine besteht **404**
 * `GET /tasks/:taskUUID/solutions` - AccessRestricted - Alle Lösungen zur Aufgabe `:taskUUID`
-* `POST /tasks/:taskUUID/comments` - AccessRestricted - Neuen Kommentar zur Aufgabe `:taskUUID` erstellen
-	* comment - String - Inhalt des Kommentars
-* `POST /tasks/:taskUUID/rating` - AccessRestricted - Neue Bewertung zur Aufgabe `:taskUUID` abgeben
-	* r1, r2, r3, r4, r5 - Integer (0-5) - Werte für verschiedene Parameter (bisher ohne Zuordnung)
-	* comment - String - Zusatzkommentar zur Bewertung
+* **NEW** `POST /tasks/:taskUUID/ratings` - AccessRestricted - Neue Bewertung zur Aufgabe `:taskUUID` abgeben
+	* values - Array - Array aus Integern, die die Einzelbewertungen für verschiedene Kriterien darstellen
+	* names - Array - Array aus Strings mit den Bezeichnungen der einzelnen Kriterien
+	* comment - String - Zusatzkommentar zur Bewertung - Max. Länge 1000 Zeichen
 * `POST /tasks/:taskUUID/solutions` - AccessRestricted - Neue Lösung für die Aufgabe `:taskUUID`
-	* description - String - Inhalt der Lösung
+	* description - String - Inhalt der Lösung - Max. Länge 2000 Zeichen
+* **NEW** `PUT /tasks/:taskUUID` - AuthorOnly - Aktualisiert die Aufgabe
 * `PUT /tasks/:taskUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Aufgabe
+* **NEW** `PUT /tasks/:taskUUID/submit` - AuthorOnly - Gibt die Aufgabe ab, macht sie unveränderbar
 
 ---
 ### Lösungen/Solutions
 * `GET /solutions/:solutionUUID` - AccessRestricted - Liefert die Lösung `:solutionUUID`
 * `GET /solutions/:solutionUUID/task` - AccessRestricted - Liefert die Aufgabe zur Lösung `:solutionUUID`
-* `GET /solutions/:solutionUUID/rating` - AccessRestricted - Liefert alle Bewertungen der Lösung `:solutionUUID` und die des aktuellen Users, falls vorhanden
-* `GET /solutions/:solutionUUID/comments` - AccessRestricted - Liefert die Kommentare zur Lösung `:solutionUUID`
-* `POST /solutions/:solutionUUID/rating` - AccessRestricted - Abgeben einer Bewertung für die Lösung `:solutionUUID`
-	* r1, r2, r3, r4, r5 - Integer (0-5) - Werte für verschiedene Parameter (bisher ohne Zuordnung)
-	* comment - String - Zusatzkommentar zur Bewertung
-* `POST /solutions/:solutionUUID/comments` - AccessRestricted - Erstellen eines Kommentars zur Lösung `:solutionUUID`
-	* comment - String - Inhalt des Kommentars
-* `PUT /solutions/:soltuionUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Lösung
+* `GET /solutions/:solutionUUID/ratings` - AccessRestricted - Liefert alle Bewertungen der Lösung `:solutionUUID`
+* **NEW** `GET /solutions/:solutionUUID/rating` - AccessRestricted - Liefert die eigene Bewertung für die Lösung `:solutionUUID`, falls keine besteht **404**
+* **NEW** `POST /solutions/:solutionUUID/ratings` - AccessRestricted - Neue Bewertung zur Lösung `:solutionUUID` abgeben
+	* values - Array - Array aus Integern, die die Einzelbewertungen für verschiedene Kriterien darstellen
+	* names - Array - Array aus Strings mit den Bezeichnungen der einzelnen Kriterien
+	* comment - String - Zusatzkommentar zur Bewertung - Max. Länge 1000 Zeichen
+* **NEW** `PUT /solutions/:solutionUUID` - AuthorOnly - Aktualisiert die Lösung
+* `PUT /solutions/:solutionUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Lösung
+* **NEW** `PUT /solutions/:solutionUUID/submit` - AuthorOnly - Gibt die Lösung ab, macht sie unveränderbar
 
 ---
 ### Infos
 * `GET /infos/:infoUUID` - AccessRestricted - Liefert die Info `:infoUUID`
-* `GET /infos/:infoUUID/target` - AccessRestricted -
-* `GET /infos/:infoUUID/comments` - AccessRestricted - Alle Kommentare zur Info `:infoUUID`
-* `GET /infos/:infoUUID/rating` - AccesssRestricted - Liefert alle Bewertungen der Info `:infoUUID` und die des aktuellen Users, falls vorhanden
-* `POST /infos/:infoUUID/comments` - AccessRestricted - Erstellen eines neuen Kommentars zur Info `:infoUUID`
-	* comment - String - Inhalt des Kommentars
-* `POST /infos/:infoUUID/rating` - AccessRestricted - Abgeben einer Bewertung der Info `:infoUUID`
-	* r1, r2, r3, r4, r5 - Integer (0-5) - Werte für verschiedene Parameter (bisher ohne Zuordnung)
-	* comment - String - Zusatzkommentar zur Bewertung
+* `GET /infos/:infoUUID/target` - AccessRestricted - Liefert das Lernziel zu dem die Info `:infoUUID` gehört
+* `GET /infos/:infoUUID/ratings` - AccessRestricted - Liefert alle Bewertungen der Info `:infoUUID`
+* **NEW** `GET /infos/:infoUUID/rating` - AccessRestricted - Liefert die eigene Bewertung für `:infoUUID`, falls keine besteht **404**
+* **NEW** `POST /infos/:infoUUID/ratings` - AccessRestricted - Neue Bewertung zur Info `:infoUUID` abgeben
+	* values - Array - Array aus Integern, die die Einzelbewertungen für verschiedene Kriterien darstellen
+	* names - Array - Array aus Strings mit den Bezeichnungen der einzelnen Kriterien
+	* comment - String - Zusatzkommentar zur Bewertung - Max. Länge 1000 Zeichen
+* **NEW** `PUT /infos/:infoUUID` - AuthorOnly - Aktualisiert die Info
 * `PUT /infos/:infoUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Info
+* **NEW** `PUT /infos/:infoUUID/submit` - AuthorOnly - Gibt die Info ab, macht sie unveränderbar
 
 ---
 ### Nutzerprofile
@@ -144,6 +136,7 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 * `GET /self/tasks/sovled` - Liefert alle vom aktuellen User gelösten Aufgaben
 * `GET /self/infos` - Liefert alle Infos des aktuellen Users
 * `GET /self/points` - Liefert Punktekonto des aktuellen Users
+* **NEW** `GET /self/prestige` - Liefert den aktuellen Prestige-/Rufwert des Nutzers
 * `GET /self/workpackage` - Liefert die aktuelle Arbeitspaketsituation des Nutzers
 
 ---
@@ -154,7 +147,7 @@ Alle Aufgaben, Lösungen und Informationen können von anderen Nutzern bewertet 
 	{
 	    message: "Eine Klartextnachricht, die den Fehlerumstand beschreibt",
 			error: {
-	        name: "StudiengangNotFound", // interner Name
+	        name: "TargetNotFound", // interner Name
 	        status: 404 // HTTP-Status
 	    }
 	}
@@ -163,5 +156,5 @@ Als HTTP-Statusmeldungen werden verwendet:
 - **400** (Bad Request), falls der HTTP-Request fehlerhaft ist (z.B. fehlen benötigte Parameter)
 - **401** (Unauthorized), falls der Client keinen Zugriff auf die spezifizierte Ressource besitzt
 - **404** (Not Found), falls spezifische Ressource nicht gefunden wurde
-- **409** (Conflict), falls eine Ressource erstellt werden soll, die bereits existiert oder eine Ressource nicht gelöscht werden konnte
+- **409** (Conflict), falls eine Ressource erstellt werden soll, die bereits existiert oder eine Ressource nicht gelöscht/geändert werden konnte
 - **500** (Internal), falls es einen internen Serverfehler gibt

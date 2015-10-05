@@ -22,9 +22,10 @@ var moment = require('moment');
 
 var Node = require('./node');
 var Task = require('./task');
-var Comment = require('./comment');
 var User = require('./user');
-var Degree = require('./degree');
+var Target = require('./target');
+var Rating = require('./rating');
+
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -36,10 +37,10 @@ Solution.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Loesungs-Nodes für Loesung#create
 Solution.VALIDATION_RULES = {
-  description: 'required|string'
+  description: 'required|string|max:2000'
 };
 
-Solution.PROTECTED_ATTRIBUTES = ['createdAt', 'author', 'task'];
+Solution.PROTECTED_ATTRIBUTES = ['uuid', 'createdAt', 'author', 'task'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -68,7 +69,7 @@ Object.defineProperty(Solution.prototype, 'author', {
 // Statische Methoden
 
 /**
- * @function get Statische Gettermethode für Lösungen
+ * @function Statische Gettermethode für Lösungen
  * @param {string} uuid UUID der gesuchten Lösung
  */
 Solution.get = function (uuid, callback) {
@@ -101,7 +102,7 @@ Solution.get = function (uuid, callback) {
 };
 
 /**
- * @function get Statische Gettermethode für ALLE Lösungen
+ * @function Statische Gettermethode für ALLE Lösungen
  */
 Solution.getAll = function (callback) {
 
@@ -124,36 +125,30 @@ Solution.getAll = function (callback) {
 };
 
 /**
- * @function
- * @name create Erstellt eine neue Lösung und speichert es in der Datenbank
+ * @function Erstellt eine neue Lösung und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} taskUUID UUID der Aufgaben-Node für die die Lösung gilt
  * @param {string} userUUID UUID des Users, der die Lösung angefertigt hat
- * @param {integer} gainedPoints Anzahl der Punkte die für das Erstellen verdient werden
- * @param {integer} spentPoints Anzahl der Punkte die das Erstellen kosten soll
  */
-Solution.create = function (properties, taskUUID, userUUID, gainedPoints, spentPoints, callback) {
+Solution.create = function (properties, taskUUID, userUUID, callback) {
 
   // Validierung
   validator
     .validate(Solution.VALIDATION_RULES, properties)
     .then(function() {
 
-      properties.createdAt = parseInt(moment().format('X'));
+      properties.createdAt = moment().format('X');
       properties.author = userUUID;
       properties.task = taskUUID;
 
       var query = [
         'MATCH (a:Task {uuid: {task}}), (u:User {uuid: {author}})',
-        'MERGE (a)<-[r1:SOLVES]-(s:Solution)<-[r2:CREATED]-(u)',
-        'ON CREATE SET s = {properties}, r2.gainedPoints = {gainedPoints}, r2.spentPoints = {spentPoints}',
+        'CREATE UNIQUE (a)<-[:SOLVES]-(s:Solution:Unfinished {properties})<-[:CREATED]-(u)',
         'return s'
       ].join('\n');
 
       var params = {
         properties: properties,
-        gainedPoints: gainedPoints,
-        spentPoints: spentPoints,
         task: taskUUID,
         author: userUUID
       };
@@ -169,15 +164,6 @@ Solution.create = function (properties, taskUUID, userUUID, gainedPoints, spentP
           err = new Error('Die Aufgabe `' + taskUUID + '` existiert nicht');
           err.status = 404;
           err.name = 'TaskNotFound';
-          return callback(err);
-        }
-
-        // obige Query fängt nicht den Fall ab, falls bereits eine Lösung bestand
-        if(result[0].s.properties.createdAt !== properties.createdAt) {
-          // Lösung bestand bereits
-          err = new Error('Du hast die Aufgabe bereits gelöst');
-          err.status = 409;
-          err.name = 'TaskAlreadySolved';
           return callback(err);
         }
 
@@ -198,6 +184,60 @@ Solution.create = function (properties, taskUUID, userUUID, gainedPoints, spentP
 };
 
 // Instanzmethoden
+
+/**
+ * @function Aktualisiert die Lösung mit den Daten aus dem {properties} Objekt
+ * @param {object} properties Objekt mit neuen Daten für die Lösung
+ */
+Solution.prototype.patch = function(properties, cb) {
+
+  var self = this;
+
+  Solution.PROTECTED_ATTRIBUTES.forEach(function(i) {
+    if(properties.hasOwnProperty(i)) delete properties[i];
+  });
+
+  properties.changedAt = moment().format('X');
+
+  // Validierung
+  validator
+    .validate(Solution.VALIDATION_RULES, properties)
+    .then(function() {
+
+      var query = [
+        'MATCH (s:Solution:Unfinished {uuid: {solutionUUID}})',
+        'SET s += {properties}',
+        'RETURN s'
+      ].join('\n');
+
+      var params = {
+        solutionUUID: self.uuid,
+        properties: properties
+      };
+
+      db.cypher({
+        query: query,
+        params: params
+      }, function(err, result) {
+        if(err) return cb(err);
+        if(result.length === 0) {
+          // Lösung `solutionUUID` existiert nicht oder ist nicht mehr veränderbar
+          err = new Error('Die Lösung `'+self.uuid+'` existiert nicht oder ist nicht mehr änderbar');
+          err.status = 409;
+          err.name = 'AlreadySubmitted';
+          return cb(err);
+        }
+        var solution = new Solution(result[0].s);
+        return cb(null, solution);
+      });
+
+    })
+    .catch(function(err) {
+      return cb(err);
+    });
+
+};
+
 
 /**
  * @function Gibt zugehörige Aufgabe zu dieser Lösung zurück
@@ -231,13 +271,13 @@ Solution.prototype.getTask = function (callback) {
 /**
  * @function Middleware um den Studiengang, zu dem diese Aufgabe gehört, im Request zu speichern
  */
-Solution.prototype.getParentDegree = function(callback) {
+Solution.prototype.getParentTarget = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (s:Solution {uuid: {uuid}})-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
-    'RETURN d'
+    'MATCH (s:Solution {uuid: {uuid}})-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'RETURN et'
   ].join('\n');
 
   var params = {
@@ -248,7 +288,37 @@ Solution.prototype.getParentDegree = function(callback) {
     query: query,
     params: params
   }, function(err, result) {
-    callback(err, new Degree(result[0].d));
+    callback(err, new Target(result[0].et));
+  });
+
+};
+
+/**
+ * @function Liefert alle Bewertungen einer Lösung, falls welche bestehen
+ */
+Solution.prototype.getRatings = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (n {uuid: {selfUUID}})<-[:RATES]-(r:Rating)',
+    'RETURN r'
+  ].join('\n');
+
+  var params = {
+    selfUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    var ratings = result.map(function(i) {
+      var r = new Rating(i.r);
+      return r;
+    });
+    return callback(null, ratings);
   });
 
 };
@@ -259,15 +329,25 @@ Solution.prototype.getParentDegree = function(callback) {
  */
 Solution.prototype.addMetadata = function (apiVersion) {
 
+  // Autor soll anonym sein
+  if(this.properties.author) {
+    delete this.properties.author;
+  }
+
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/solutions/' + encodeURIComponent(this.uuid);
 
   var links = {};
   links.ref = base;
-  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  //links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
   links.task = apiVersion + '/tasks/' + encodeURIComponent(this.properties.task);
-  links.comments = base + '/comments';
+  links.ratings = base + '/ratings';
   links.rating = base + '/rating';
+  links.status = base + '/status';
+  // falls die Aufgabe `unfinished` ist, kann man sie unter folgender URL abgeben
+  if(!this.isFinished()) {
+    links.submit = base + '/submit';
+  }
   this.links = links;
 
 };

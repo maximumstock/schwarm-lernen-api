@@ -9,9 +9,9 @@ var router = express.Router();
 var config = require('../../config/config');
 var helper = require('./helper/middleware');
 var auth = require('./auth/auth');
+var async = require('async');
 
 var Task = require('../../models/task');
-var Comment = require('../../models/comment');
 var Solution = require('../../models/solution');
 var Rating = require('../../models/rating');
 
@@ -31,19 +31,32 @@ router.get('/solutions/:solutionUUID', helper.prefetchSolution, auth.restricted,
   res.json(solution);
 });
 
-// Gibt Bewertung der Aufgabe zurück
+// Gibt Bewertung der Lösung zurück
+router.get('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+
+  var solution = req._solution;
+  var user = req.user;
+
+  solution.getRatings(function(err, ratings) {
+    if(err) return next(err);
+    ratings.forEach(function(r) {
+      r.addMetadata(API_VERSION);
+    });
+    res.json(ratings);
+  });
+
+});
+
+// Gibt eigene Bewertung für die Lösung zurück, falls eine existiert
 router.get('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, function(req, res, next) {
 
   var solution = req._solution;
   var user = req.user;
 
-  solution.getRating(function(err, rating) {
+  user.getMyRatingFor(solution.uuid, function(err, myrating) {
     if(err) return next(err);
-    user.getMyRatingFor(solution.uuid, function(err, myrating) {
-      if(err) return next(err);
-      rating.myRating = myrating;
-      res.json(rating);
-    });
+    myrating.addMetadata(API_VERSION);
+    res.json(myrating);
   });
 
 });
@@ -63,73 +76,80 @@ router.get('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.re
 });
 
 // Fügt Rating hinzu
-router.post('/solutions/:solutionUUID/rating', helper.prefetchSolution, auth.restricted, helper.prefetchConfig, function(req, res, next) {
+router.post('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.restricted, helper.prefetchConfig, function(req, res, next) {
 
-  validator
-    .validate(Rating.VALIDATION_RULES, req.body)
-    .then(function() {
+  var user = req.user;
+  var config = req._config;
+  var pack = req._package;
+  var solution = req._solution;
 
-      var user = req.user;
-      var config = req._config;
-
-      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
-      // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
-      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
-      // falls > 0: Einstellung möglich
-      if(user.ratingsToDo !== 0) {
-
-        // überprüfe ob der Nutzer noch genug Punkte hat
-        user.hasPoints(config.ratingCost, function(err, heDoes) {
-          if(err) return next(err);
-          if(!heDoes) {
-            err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
-            err.status = 409;
-            err.name = 'MissingPoints';
-            return next(err);
-          } else {
-
-            user.rate(req.params.solutionUUID, req.body, config.ratePoints, config.rateCost, config.rateMultiplier, function(err, result) {
-              if(err) return next(err);
-              res.status(201).json({success: true});
-
-              user.didWorkOnPackage({tasks: 0, infos: 0, solutions: 0, ratings: 1}, config, function(err, result) {
-                if(err) console.error(err);
-              });
-            });
-          }
-        });
-
-      } else {
-        // Nutzer muss erst Paket abarbeiten
-        var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
-        err.status = 409;
-        err.name = 'WorkPackageNotDone';
-        res.json(err);
+  // eigentliche Funktion die die Bewertung erstellt, Punkte verteilt, etc.
+  function create() {
+    Rating.create(req.body, user.uuid, solution.uuid, function(err, rating) {
+      if(err) return next(err);
+      rating.addMetadata(API_VERSION);
+      // Admins brauchen keine Punkte, etc
+      if(user.isAdmin()) {
+        return res.status(201).json(rating);
       }
 
-    })
-    .catch(function(errors) {
-      return next(errors);
+      // Arbeitspaket aktualisieren
+      // Punkte an den Ersteller der Bewertung verteilen
+      // Punkte vom Ersteller der Bewertung abziehen
+      // Punkte an den Ersteller des bewerteten Inhalts verteilen
+      async.parallel([
+        function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
+        function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
+        function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
+        function(_cb) { rating.givePointsTo(solution.author, {points: rating.getRating().avg, prestige: user.prestige}, _cb); }
+      ], function(errors, results) {
+        if(errors) next(errors);
+        return res.status(201).json({success: true});
+      });
     });
-
-});
-
-// Fügt Kommentar hinzu
-router.post('/solutions/:solutionUUID/comments', helper.prefetchSolution, auth.restricted, function(req, res, next) {
-
-  req.checkBody('comment', 'Inhalt des Kommentars fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
   }
 
-  Comment.create(req.body, req.params.solutionUUID, req.user.uuid, function(err, comment) {
-    if(err) return next(err);
-    comment.addMetadata(API_VERSION);
-    res.status(201).json(comment);
-  });
+  // Admins dürfen sowieso
+  if(user.isAdmin()) {
+    create();
+  } else {
+    // der User sollte seine eigenen Inhalte nicht bewerten dürfen
+    user.hasCreated(solution.uuid, function(err, hasCreated) {
+      if(err) return next(err);
+      if(hasCreated) {
+        err = new Error('Du darfst nicht deine eigenen Inhalte bewerten.');
+        err.status = 409;
+        return next(err);
+      }
+
+      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
+      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+      if(user.ratingsToDo === 0) {
+        // Nutzer muss erst Paket abarbeiten
+        err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
+        err.status = 409;
+        err.name = 'WorkPackageNotDone';
+        return next(err);
+      }
+      // falls > 0: Einstellung möglich
+      // überprüfe ob der Nutzer noch genug Punkte hat
+      user.hasPoints(config.ratingCost, function(err, heDoes) {
+        if(err) return next(err);
+        if(!heDoes) {
+          err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
+          err.status = 409;
+          err.name = 'MissingPoints';
+          return next(err);
+        }
+
+        create();
+
+      });
+    });
+  }
 
 });
+
 
 // Aufgabe an dem die Lösung hängt
 router.get('/solutions/:solutionUUID/task', helper.prefetchSolution, auth.restricted, function(req, res, next) {
@@ -159,6 +179,47 @@ router.put('/solutions/:solutionUUID/status', helper.prefetchSolution, auth.admi
       s.addMetadata(API_VERSION);
       res.json(s);
     });
+  });
+
+});
+
+/**************************************************
+              AUTHOR ONLY ROUTES
+**************************************************/
+
+// Finalisiert die Aufgabe und macht sie öffentlich
+router.put('/solutions/:solutionUUID/submit', helper.prefetchSolution, auth.authorOnly, function(req, res, next) {
+
+  var solution = req._solution;
+  var user = req.user;
+
+  solution.finalize(function(err, result) {
+    if(err) return next(err);
+    Solution.get(solution.uuid, function(err, solution) {
+      if(err) return next(err);
+      solution.addMetadata(API_VERSION);
+      res.json(solution);
+    });
+  });
+
+});
+
+// Aktualisiert die Lösung
+router.put('/solutions/:solutionUUID', helper.prefetchSolution, auth.authorOnly, function(req, res, next) {
+
+  var solution = req._solution;
+
+  if(solution.isFinished()) {
+    var err = new Error('Diese Lösung wurde bereits abgegeben. Du kannst sie nicht mehr verändern.');
+    err.status = 409;
+    err.name = 'AlreadySubmitted';
+    return next(err);
+  }
+
+  solution.patch(req.body, function(err, nsolution) {
+    if(err) return next(err);
+    nsolution.addMetadata(API_VERSION);
+    res.json(nsolution);
   });
 
 });

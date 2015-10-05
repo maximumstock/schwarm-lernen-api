@@ -17,14 +17,14 @@ var neo4j = require('neo4j');
 var config = require('../config/config');
 var indicative = require('indicative');
 var validator = new indicative();
+var dbhelper = require('../lib/db');
 var moment = require('moment');
 
 var Node = require('./node');
-var Degree = require('./degree');
 var Solution = require('./solution');
-var Comment = require('./comment');
 var User = require('./user');
 var Target = require('./target');
+var Rating = require('./rating');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -36,10 +36,10 @@ Task.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Aufgabe-Nodes für Aufgabe#create
 Task.VALIDATION_RULES = {
-  description: 'required|string'
+  description: 'required|string|max:2000'
 };
 
-Task.PROTECTED_ATTRIBUTRES = ['createdAt', 'author', 'target'];
+Task.PROTECTED_ATTRIBUTES = ['uuid', 'createdAt', 'author', 'target'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -66,9 +66,8 @@ Object.defineProperty(Task.prototype, 'author', {
 // Statische Methoden
 
 /**
- * @function get Statische Gettermethode für Aufgaben
+ * @function Statische Gettermethode für Aufgaben
  * @param {string} uuid UUID der gesuchten Aufgabe
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Task.get = function(uuid, callback) {
 
@@ -101,8 +100,7 @@ Task.get = function(uuid, callback) {
 };
 
 /**
- * @function get Statische Gettermethode für ALLE Aufgaben
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
+ * @function Statische Gettermethode für ALLE Aufgaben
  */
 Task.getAll = function(callback) {
 
@@ -127,38 +125,33 @@ Task.getAll = function(callback) {
 };
 
 /**
- * @function
- * @name create Erstellt eine neue Aufgabe und speichert es in der Datenbank
+ * @function Erstellt eine neue Aufgabe und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} parentUUID UUID der Parent-Node, an die die Aufgabe gehängt werden soll
  * @param {string} authorUUID UUID des Autors der Aufgabe
- * @param {integer} gainedPoints Anzahl der Punkte die für das Erstellen verdient werden
- * @param {integer} spentPoints Anzahl der Punkte die das Erstellen kosten soll
  */
-Task.create = function(properties, parentUUID, authorUUID, gainedPoints, spentPoints, callback) {
+Task.create = function(properties, parentUUID, authorUUID, callback) {
 
   // Validierung
   validator
     .validate(Task.VALIDATION_RULES, properties)
     .then(function() {
 
-      properties.createdAt = parseInt(moment().format('X'));
+      properties.createdAt = moment().format('X');
       properties.author = authorUUID;
       properties.target = parentUUID;
 
       var query = [
         'MATCH (dt:Target {uuid: {parent}}), (u:User {uuid: {author}})',
-        'CREATE (a:Task {properties})',
-        'CREATE UNIQUE (u)-[:CREATED {gainedPoints: {gainedPoints}, spentPoints: {spentPoints}}]->(a)-[r:BELONGS_TO]->(dt)',
+        'CREATE (a:Task:Unfinished {properties})',
+        'CREATE UNIQUE (u)-[:CREATED]->(a)-[r:BELONGS_TO]->(dt)',
         'RETURN a'
       ].join('\n');
 
       var params = {
         properties: properties,
         parent: parentUUID,
-        author: authorUUID,
-        gainedPoints: gainedPoints,
-        spentPoints: spentPoints
+        author: authorUUID
       };
 
       db.cypher({
@@ -170,24 +163,19 @@ Task.create = function(properties, parentUUID, authorUUID, gainedPoints, spentPo
 
         // falls es kein Ergebnis gibt wurde die neue Aufgabe nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
         if(result.length === 0) {
-          err = new Error('Das Lernziel als Parent mit der UUID `' + parentUUID + '` existiert nicht');
+          err = new Error('Das Lernziel als Parent mit der UUID `' + parentUUID + '` oder der User mit der UUID `'+authorUUID+'` existiert nicht');
           err.status = 404;
           err.name = 'TargetNotFound';
 
           return callback(err);
         }
 
-        // hole gerade erstellte Aufgabe aus der Datenbank
-        db.cypher({
-          query: 'MATCH (a:Task) where ID(a) = {id} RETURN a',
-          params: {
-            id: result[0].a._id
-          }
-        }, function(err, result) {
-          if(err) return callback(err);
-          // erstelle neue Aufgabeninstanz und gib diese zurück
-          var a = new Task(result[0].a);
-          callback(null, a);
+        // hole gerade erstellte Info aus der Datenbank
+        dbhelper.getNodeByID(result[0].a._id, function (err, node) {
+          if (err) return callback(err);
+          // erstelle neue Infosinstanz und gib diese zurück
+          var i = new Task(node);
+          callback(null, i);
         });
 
       });
@@ -199,6 +187,59 @@ Task.create = function(properties, parentUUID, authorUUID, gainedPoints, spentPo
 
 };
 
+
+/**
+ * @function Aktualisiert die Aufgabe mit den Daten aus dem {properties} Objekt
+ * @param {object} properties Objekt mit neuen Daten für die Aufgabe
+ */
+Task.prototype.patch = function(properties, cb) {
+
+  var self = this;
+
+  Task.PROTECTED_ATTRIBUTES.forEach(function(i) {
+    if(properties.hasOwnProperty(i)) delete properties[i];
+  });
+
+  properties.changedAt = moment().format('X');
+
+  // Validierung
+  validator
+    .validate(Task.VALIDATION_RULES, properties)
+    .then(function() {
+
+      var query = [
+        'MATCH (t:Task:Unfinished {uuid: {taskUUID}})',
+        'SET t += {properties}',
+        'RETURN t'
+      ].join('\n');
+
+      var params = {
+        taskUUID: self.uuid,
+        properties: properties
+      };
+
+      db.cypher({
+        query: query,
+        params: params
+      }, function(err, result) {
+        if(err) return cb(err);
+        if(result.length === 0) {
+          // Task `taskUUID` existiert nicht oder ist nicht mehr veränderbar
+          err = new Error('Die Aufgabe `'+self.uuid+'` existiert nicht oder ist nicht mehr änderbar');
+          err.status = 409;
+          err.name = 'AlreadySubmitted';
+          return cb(err);
+        }
+        var task = new Task(result[0].t);
+        return cb(null, task);
+      });
+
+    })
+    .catch(function(err) {
+      return cb(err);
+    });
+
+};
 
 /**
  * @function Löscht die alte Parent-Beziehung zwischen dieser Aufgaben und dessen Lernziel und
@@ -301,13 +342,13 @@ Task.prototype.getSolutions = function(callback) {
 /**
  * @function Middleware um den Studiengang, zu dem diese Aufgabe gehört, im Request zu speichern
  */
-Task.prototype.getParentDegree = function(callback) {
+Task.prototype.getParentTarget = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (t:Task {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
-    'RETURN d'
+    'MATCH (t:Task {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *0..]->(et:Target:EntryTarget)',
+    'RETURN et'
   ].join('\n');
 
   var params = {
@@ -318,7 +359,37 @@ Task.prototype.getParentDegree = function(callback) {
     query: query,
     params: params
   }, function(err, result) {
-    callback(err, new Degree(result[0].d));
+    callback(err, new Target(result[0].et));
+  });
+
+};
+
+/**
+ * @function Liefert alle Bewertungen einer Aufgabe, falls welche bestehen
+ */
+Task.prototype.getRatings = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (n {uuid: {selfUUID}})<-[:RATES]-(r:Rating)',
+    'RETURN r'
+  ].join('\n');
+
+  var params = {
+    selfUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    var ratings = result.map(function(i) {
+      var r = new Rating(i.r);
+      return r;
+    });
+    return callback(null, ratings);
   });
 
 };
@@ -330,16 +401,27 @@ Task.prototype.getParentDegree = function(callback) {
  */
 Task.prototype.addMetadata = function(apiVersion) {
 
+  // Autor soll anonym sein
+  if(this.properties.author) {
+    delete this.properties.author;
+  }
+
   apiVersion = apiVersion || '';
   var base = apiVersion + '/tasks/' + encodeURIComponent(this.uuid);
   var links = {};
   links.ref = base;
-  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
-  links.target = apiVersion + '/target/' + encodeURIComponent(this.properties.target);
+  //links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  links.target = apiVersion + '/targets/' + encodeURIComponent(this.properties.target);
   links.solutions = base + '/solutions';
   links.solution = base + '/solution';
-  links.comments = base + '/comments';
-  links.rating = base + '/rating';
+  links.ratings = base + '/ratings';
+  links.rating = base + '/ratings';
+  links.status = base + '/status';
+
+  // falls die Aufgabe `unfinished` ist, kann man sie unter folgender URL abgeben
+  if(!this.isFinished()) {
+    links.submit = base + '/submit';
+  }
 
   this.links = links;
 

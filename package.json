@@ -31,6 +31,7 @@
     "express": "^4.13.2",
     "express-validator": "^2.14.2",
     "indicative": "^1.2.4",
+    "is_js": "^0.7.4",
     "jsonwebtoken": "^5.0.5",
     "lodash": "^3.10.1",
     "moment": "^2.10.6",

@@ -36,8 +36,12 @@ router.get('/users/:userUUID', function(req, res, next) {
 
   User.get(req.params.userUUID, function(err, user) {
     if(err) return next(err);
-    user.addMetadata(API_VERSION);
-    res.json(user);
+    user.getPrestige(function(err, prestige) {
+      if(err) return next(err);
+      user.properties.prestige = prestige;
+      user.addMetadata(API_VERSION);
+      res.json(user);
+    });
   });
 
 });

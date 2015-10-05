@@ -12,12 +12,11 @@ var login = require('./auth/login');
 var auth = require('./auth/auth');
 
 var users = require('./users');
-var degrees = require('./degrees');
 var targets = require('./targets');
 var tasks = require('./tasks');
 var solutions = require('./solutions');
 var infos = require('./infos');
-var comments = require('./comments');
+var ratings = require('./ratings');
 var profiles = require('./profiles');
 
 // API Index Route
@@ -29,6 +28,7 @@ router.get('/', function(req, res, next) {
     solutions: prefix + '/solutions',
     tasks: prefix + '/tasks',
     infos: prefix + '/infos',
+    ratings: prefix + '/ratings',
     users: prefix + '/users'
   });
 });
@@ -40,12 +40,11 @@ router.use('/', register);
 // API Routen
 router.use(auth.auth); // API Routen mit Auth-Middleware schützen
 router.use('/', users);
-router.use('/', degrees); // Degrees nur durch Admins erstell-/änderbar (siehe degrees.js)
 router.use('/', targets);
 router.use('/', tasks);
 router.use('/', solutions);
 router.use('/', infos);
-router.use('/', comments);
+router.use('/', ratings);
 router.use('/', profiles);
 
 module.exports = router;

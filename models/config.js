@@ -49,7 +49,7 @@ Config.VALIDATION_RULES = {
 };
 
 // Attribute die nicht per .patch aktualsiert werden dürfen
-Config.PROTECTED_ATTRIBUTES = ['degree', 'createdAt'];
+Config.PROTECTED_ATTRIBUTES = ['createdAt', 'parent', 'uuid'];
 
 // Default-Konfigurationsobjekt für das Erstellen neuer Studiengänge
 Config.DEFAULT_CONFIG = {
@@ -164,6 +164,12 @@ Object.defineProperty(Config.prototype, 'taskPoints', {
   }
 });
 
+Object.defineProperty(Config.prototype, 'parent', {
+  get: function() {
+    return this.properties.parent;
+  }
+});
+
 // Öffentliche Methoden
 
 // Statische Methoden
@@ -205,17 +211,17 @@ Config.get = function (uuid, callback) {
 /**
  * @function Erstellt ein neue Konfiguration für einen Studiengang
  * @param {object} properties Attribute der anzulegenden Node
- * @param {string} degreeUUID UUID des Studiengangs für den die Konfiguration gilt
+ * @param {string} parentUUID UUID des Lernziels für den die Konfiguration gilt
  */
-Config.create = function (properties, degreeUUID, callback) {
+Config.create = function (properties, parentUUID, callback) {
 
   // Validierung
   validator
     .validate(Config.VALIDATION_RULES, properties)
     .then(function() {
 
-      properties.createdAt = parseInt(moment().format('X'));
-      properties.degree = degreeUUID;
+      properties.createdAt = moment().format('X');
+      properties.parent = parentUUID;
 
       // shares normalisieren
       var sum = properties.solutionShare + properties.infoShare + properties.taskShare + properties.rateShare;
@@ -225,14 +231,14 @@ Config.create = function (properties, degreeUUID, callback) {
       properties.rateShare = properties.rateShare / sum;
 
       var query = [
-        'MATCH (d:Degree {uuid: {degreeUUID}})',
-        'CREATE (d)<-[:BELONGS_TO]-(c:Config {properties})',
+        'MATCH (t:Target {uuid: {parentUUID}})',
+        'CREATE (t)<-[:BELONGS_TO]-(c:Config {properties})',
         'RETURN c'
       ].join('\n');
 
       var params = {
         properties: properties,
-        degreeUUID: degreeUUID
+        parentUUID: parentUUID
       };
 
       db.cypher({
@@ -242,8 +248,8 @@ Config.create = function (properties, degreeUUID, callback) {
 
         if (err) return callback(err);
         if(result.length === 0) {
-          err = new Error('Es gibt keinen Studiengang mit der UUID `'+degreeUUID+'`');
-          err.name = 'DegreeNotFound';
+          err = new Error('Es gibt kein Lernziel mit der UUID `'+parentUUID+'`');
+          err.name = 'TargetNotFound';
           err.status = 404;
           return callback(err);
         }
@@ -265,47 +271,6 @@ Config.create = function (properties, degreeUUID, callback) {
     });
 
 };
-
-// Instanzmethoden
-
-// /**
-//  * @function Löscht eine bestehenden Studiengang aus der Datenbank. Ein Studiengang kann nur gelöscht werden, sobald er
-//  * keine weiteren Beziehungen mehr besitzt
-//  */
-// Degree.prototype.del = function (callback) {
-//
-//   var self = this;
-//
-//   var query = [
-//     'MATCH (d:Degree {uuid: {uuid}})',
-//     'DELETE d'
-//   ].join('\n');
-//
-//   var params = {
-//     uuid: self.uuid
-//   };
-//
-//   db.cypher({
-//     query: query,
-//     params: params
-//   }, function (err, result) {
-//
-//     // Keine Neo4J-Node kann gelöscht werden, falls noch Relationships daran hängen
-//     if (err instanceof neo4j.DatabaseError &&
-//       err.neo4j.code === 'Neo.DatabaseError.Transaction.CouldNotCommit') {
-//
-//       err = new Error('Am Studiengang `' + self.name + '` hängen noch Beziehungen.');
-//       err.name = 'RemainingRelationships';
-//       err.status = 409;
-//
-//     }
-//
-//     if (err) return callback(err);
-//     // gib `null` zurück (?!)
-//     callback(null, null);
-//   });
-//
-// };
 
 /**
  * @function Aktualisiert die jeweilige Node mit neuen Informationen
@@ -333,7 +298,7 @@ Config.prototype.patch = function (properties, callback) {
   properties.taskShare = properties.taskShare / sum;
   properties.rateShare = properties.rateShare / sum;
 
-  properties.changedAt = parseInt(moment().format('X'));
+  properties.changedAt = moment().format('X');
 
   var query = [
     'MATCH (c:Config {uuid: {uuid}})',
@@ -369,7 +334,7 @@ Config.prototype.addMetadata = function (apiVersion) {
   apiVersion = apiVersion ||  '';
 
   var links = {};
-  links.degree = apiVersion + '/degrees/' + encodeURIComponent(this.degree);
+  links.parent = apiVersion + '/targets/' + encodeURIComponent(this.parent);
   this.links = links;
 
 };

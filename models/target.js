@@ -21,9 +21,10 @@ var dbhelper = require('../lib/db');
 var moment = require('moment');
 
 var Node = require('./node');
-var Degree = require('./degree');
 var Task = require('./task');
 var Info = require('./info');
+var Config = require('./config');
+var User = require('./user');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -35,10 +36,10 @@ Target.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Lernziel-Nodes für Lernziel#create
 Target.VALIDATION_RULES = {
-  name: 'required|string|alpha_numeric'
+  name: 'required|string|max:50'
 };
 
-Target.PROTECTED_ATTRIBUTES = ['createdAt'];
+Target.PROTECTED_ATTRIBUTES = ['uuid', 'createdAt'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
@@ -67,15 +68,14 @@ Object.defineProperty(Target.prototype, 'parent', {
 // Statische Methoden
 
 /**
- * @function get Statische Gettermethode für Lernziele
+ * @function Statische Gettermethode für Lernziele
  * @param {string} uuid UUID des gesuchten Lernziels
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Target.get = function(uuid, callback) {
 
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[r:PART_OF]->(p)',
-    'RETURN t, p'
+    'MATCH (t:Target {uuid: {uuid}})',
+    'RETURN t'
   ].join('\n');
 
   var params = {
@@ -101,8 +101,7 @@ Target.get = function(uuid, callback) {
 };
 
 /**
- * @function get Statische Gettermethode für ALLE Lernziele
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
+ * @function Statische Gettermethode für ALLE Lernziele
  */
 Target.getAll = function(callback) {
 
@@ -127,11 +126,33 @@ Target.getAll = function(callback) {
 };
 
 /**
+ * @function Statische Gettermethode für alle Hauptlernziele
+ */
+Target.getAllEntryTargets = function(cb) {
+
+  var query = [
+    'MATCH (t:Target:EntryTarget)',
+    'RETURN t'
+  ].join('\n');
+
+  db.cypher({
+    query: query
+  }, function(err, result) {
+    if(err) return cb(err);
+
+    var targets = result.map(function(e) {
+      return new Target(e.t);
+    });
+    cb(null, targets);
+  });
+
+};
+
+/**
  * @function
  * @name create Erstellt eine neues Lernziel und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} parentUUID UUID der Parent-Node, an die das Lernziel gehängt werden soll
- * @param {callback} callback Callbackfunktion, die die neu erstellte Node entgegennimt
  */
 Target.create = function(properties, parentUUID, callback) {
 
@@ -140,15 +161,22 @@ Target.create = function(properties, parentUUID, callback) {
     .validate(Target.VALIDATION_RULES, properties)
     .then(function() {
 
-      properties.createdAt = parseInt(moment().format('X'));
+      properties.createdAt = moment().format('X');
 
       var query = [
-        'MATCH (dt {uuid: {parent}})',
-        'WHERE (dt:Degree) or (dt:Target)', // Targets sind nur mit anderen Targets oder Degrees verbunden
-        'MERGE (t:Target {name: {name}})-[r:PART_OF]->(dt)',
-        'ON CREATE SET t = {properties}',
+        'MATCH (dt:Target {uuid: {parent}})',
+        'CREATE (t:Target {properties})',
+        'CREATE UNIQUE (t)-[r:PART_OF]->(dt)',
         'return t'
       ].join('\n');
+
+      // falls parentUUID null ist, soll es ein neues EntryTarget werden
+      if(!parentUUID) {
+        query = [
+          'CREATE (t:Target:EntryTarget {properties})',
+          'RETURN t'
+        ].join('\n');
+      }
 
       var params = {
         properties: properties,
@@ -165,7 +193,7 @@ Target.create = function(properties, parentUUID, callback) {
 
         // falls es kein Ergebnis gibt wurde das neue Lernziel nicht erstellt da es keinen passenden Parent zu `parentUUID` gibt
         if(result.length === 0) {
-          err = new Error('Es gibt keinen gültigen Studiengang/kein gültiges Lernziel als Parent mit der UUID `' + parentUUID + '`');
+          err = new Error('Es gibt kein gültiges Lernziel als Parent mit der UUID `' + parentUUID + '`');
           err.status = 404;
           err.name = 'ParentNotFound';
 
@@ -193,17 +221,16 @@ Target.create = function(properties, parentUUID, callback) {
 // Instanzmethoden
 
 /**
- * @function
- * @name del Löscht ein bestehendes Lernziel und seine Verbindung nach "oben" (zum übergeordneten Target/Studiengang) aus der Datenbank
- * @param {callback} callback Callbackfunktion, die die gelöschte Node engegennimmt
+ * @function Löscht ein bestehendes Lernziel und seine Verbindung nach "oben" (zum übergeordneten Target/Studiengang) aus der Datenbank
  */
 Target.prototype.del = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[r:PART_OF]->(o)', // Target hängt immer an etwas
-    'DELETE t, r'
+    'MATCH (t:Target {uuid: {uuid}})',
+    'OPTIONAL MATCH (t)-[r *1..]-(o)',
+    'DELETE t, r, o'
   ].join('\n');
 
   var params = {
@@ -226,19 +253,16 @@ Target.prototype.del = function(callback) {
     }
 
     if(err) return callback(err);
-    // gib `null` zurück (?!)
     callback(null, null); // success
   });
 
 };
 
 /**
- * @function
- * @name patch Aktualisiert die jeweilige Node mit neuen Informationen
+ * @function Aktualisiert die jeweilige Node mit neuen Informationen
  * @param {object} properties Objekt mit Attribute deren Werte aktualisiert bzw.
  * deren Key-Value-Paare angelegt werden sollen, falls sie nicht bereits bestehen.
  * Ändert nur die Attribute der Node und nicht deren Beziehungen (siehe #changeParent)
- * @param {callback} callback Callbackfunktion, die die aktualisierte Node entgegennimmt
  */
 Target.prototype.patch = function(properties, callback) {
 
@@ -248,7 +272,7 @@ Target.prototype.patch = function(properties, callback) {
     if(properties.hasOwnProperty(i)) delete properties[i];
   });
 
-  properties.changedAt = parseInt(moment().format('X'));
+  properties.changedAt = moment().format('X');
 
   var query = [
     'MATCH (t:Target {uuid: {uuid}})',
@@ -285,75 +309,6 @@ Target.prototype.patch = function(properties, callback) {
 };
 
 /**
- * @function Liefert eine bestimmte Aufgabe unter diesem Lernziel
- * @param {string} taskUUID UUID der gesuchten Aufgabe
- */
-Target.prototype.getTaskByID = function(taskUUID, callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (target:Target {uuid: {targetUUID}})<-[:BELONGS_TO]-(t:Task {uuid: {taskUUID}})',
-    'RETURN t'
-  ].join('\n');
-
-  var params = {
-    targetUUID: self.uuid,
-    taskUUID: taskUUID
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    if(result.length === 0) {
-      err = new Error('Es konnte keine Aufgabe `' + taskUUID + '` unter dem Lernziel `' + self.uuid + '`gefunden werden');
-      err.status = 404;
-      err.name = 'TaskNotFound';
-      return callback(err, null);
-    }
-    callback(null, new Task(result[0].t));
-  });
-
-};
-
-/**
- * @function Liefert eine bestimmte Info unter diesem Lernziel
- * @param {string} infoUUID UUID der gesuchten Info
- */
-Target.prototype.getInfoByID = function(infoUUID, callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (target:Target {uuid: {targetUUID}})<-[:BELONGS_TO]-(i:Info {uuid: {infoUUID}})',
-    'RETURN i'
-  ].join('\n');
-
-  var params = {
-    targetUUID: self.uuid,
-    infoUUID: infoUUID
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    if(result.length === 0) {
-      err = new Error('Es konnte keine Info `' + infoUUID + '` unter dem Lernziel `' + self.uuid + '`gefunden werden');
-      err.status = 404;
-      err.name = 'InfoNotFound';
-      return callback(err, null);
-    }
-    callback(null, new Info(result[0].i));
-  });
-
-};
-
-
-/**
  * @function Löscht die alte Parent-Beziehung zwischen diesem Lernziel und einem anderen Lernziel/Studiengang und
  * erstellt eine neue Beziehung zwischen diesem Lernziel und der angegeben Node
  * @param {string} newParent UUID der neuen Parent-Node
@@ -363,7 +318,7 @@ Target.prototype.changeParent = function(newParent, callback) {
   var self = this;
 
   var query = [
-    'MATCH (t:Target {uuid: {uuid}}), (p {uuid: {parent}})',
+    'MATCH (t:Target {uuid: {uuid}}), (p:Target {uuid: {parent}})',
     'OPTIONAL MATCH (t)-[r:PART_OF]->(oldp)',
     'DELETE r',
     'SET t.changedAt = {changedAt}',
@@ -374,7 +329,7 @@ Target.prototype.changeParent = function(newParent, callback) {
   var params = {
     uuid: self.uuid,
     parent: newParent,
-    changedAt: parseInt(moment().format('X'))
+    changedAt: moment().format('X')
   };
 
   db.cypher({
@@ -387,14 +342,29 @@ Target.prototype.changeParent = function(newParent, callback) {
 };
 
 /**
+ * @function Helferfunktion die überprüft ob es sich bei dem Lernziel um ein Hauptlernziel handelt
+ * Ein Hauptlernziel ist ein Lernziel, welches alleine stehen kann und nicht an bisherige Lernziele anschließen muss
+ * In der Datenbank sind solche Lernziele mit dem Label 'EntryTarget' versehen
+ */
+Target.prototype.isEntryTarget = function() {
+  return this.labels.indexOf('EntryTarget') > -1;
+};
+
+/**
  * @function Gibt die Parent-Node des Lernziels zurück
+ * @returns null falls es keine Parent-Node gibt
  */
 Target.prototype.getParent = function(callback) {
 
   var self = this;
 
+  // falls dieses Lernziel ein Hauptlernziel ist kann es keine Parent-Node haben
+  if(this.isEntryTarget()) {
+    return callback(null, null);
+  }
+
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF]->(dt)',
+    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF]->(dt:Target)',
     'RETURN dt'
   ].join('\n');
 
@@ -408,18 +378,13 @@ Target.prototype.getParent = function(callback) {
   }, function(err, parents) {
 
     if(err) return callback(err);
+    if(parents.length === 0) {
+      return callback(null, null);
+    }
     // Normalerweise sollte es eh nur ein Parent geben
     var parent = parents[0].dt;
-    if(parent.labels.indexOf('Degree') > -1) {
-      //var Studiengang = require('./studiengang'); // keine Ahnung warum, anders gehts nicht
-      var s = new Degree(parent);
-      callback(null, s);
-    } else if(parent.labels.indexOf('Target') > -1) {
-      var t = new Target(parent);
-      callback(null, t);
-    } else {
-      callback(null, parent);
-    }
+    var t = new Target(parent);
+    callback(null, t);
   });
 
 };
@@ -428,7 +393,7 @@ Target.prototype.getParent = function(callback) {
  * @function Gibt direkt unterstellte Nodes des Lernziels zurück
  * Ein Lernziel kann entweder Aufgaben oder weitere Lernziele als Kinder haben
  * @param {number} depth Maximale Tiefe in der Kindbeziehungen gesucht werden sollen
- * @return Objekt mit einem Array pro Kind-Typ (Aufgabe, Lernziel)
+ * @return Objekt mit einem Array pro Kind-Typ (Aufgabe, Info, Lernziel)
  */
 Target.prototype.getChildren = function(depth, callback) {
 
@@ -436,6 +401,7 @@ Target.prototype.getChildren = function(depth, callback) {
 
   var query = [
     'MATCH (t:Target {uuid: {uuid}})<-[*1..'+parseInt(depth)+']-(c)',
+    'WHERE NOT c:Unfinished',
     'RETURN c'
   ].join('\n');
 
@@ -479,163 +445,6 @@ Target.prototype.getChildren = function(depth, callback) {
 
 };
 
-/**
- * @function Gibt alle zugeordneten Infos des Lernziels
- * @return Array von Info-Objekten
- */
-Target.prototype.getInfos = function(callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (t:Target {uuid: {uuid}})<-[:BELONGS_TO]-(i:Info)',
-    'RETURN i'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, infos) {
-
-    if(err) return callback(err);
-
-    infos = infos.map(function(i) {
-      return new Info(i.i);
-    });
-
-    callback(null, infos);
-
-  });
-
-};
-
-/**
- * @function Gibt alle zugeordneten Aufgaben des Lernziels
- * @return Array von Task-Objekten
- */
-Target.prototype.getTasks = function(callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (t2:Target {uuid: {uuid}})<-[:BELONGS_TO]-(t:Task)',
-    'RETURN t'
-  ].join('\n');
-
-  var params = {
-    uuid: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, tasks) {
-
-    if(err) return callback(err);
-
-    tasks = tasks.map(function(i) {
-      return new Task(i.t);
-    });
-
-    callback(null, tasks);
-
-  });
-
-};
-
-/**
- * @function Gibt alle Aufgaben zurück, die vom User `userUUID` unter diesem Lernziel bearbeitet wurden
- * @param {string} userUUID UUID des Users auf die die Suche beschränkt werden soll
- */
-Target.prototype.getSolvedTasksByUser = function(userUUID, callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(s:Solution)-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target {uuid: {targetUUID}})',
-    'RETURN t'
-  ].join('\n');
-
-  var params = {
-    userUUID: userUUID,
-    targetUUID: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    result = result.map(function(i) {
-      return new Task(i.t);
-    });
-    callback(null, result);
-  });
-
-};
-
-/**
- * @function Gibt alle Aufgaben zurück, die noch nicht bearbeitet wurden
- */
-Target.prototype.getUnsolvedTasks = function(callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (t:Task)-[:BELONGS_TO]->(target:Target {uuid: {targetUUID}})',
-    'WHERE NOT (t)<-[:SOLVES]-()',
-    'RETURN t'
-  ].join('\n');
-
-  var params = {
-    targetUUID: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    result = result.map(function(i) {
-      return new Task(i.t);
-    });
-    callback(null, result);
-  });
-
-};
-
-/**
- * @function Gibt alle Aufgaben zurück, die bearbeitet wurden
- */
-Target.prototype.getSolvedTasks = function(callback) {
-
-  var self = this;
-
-  var query = [
-    'MATCH (s:Solution)-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target {uuid: {targetUUID}})',
-    'RETURN t'
-  ].join('\n');
-
-  var params = {
-    targetUUID: self.uuid
-  };
-
-  db.cypher({
-    query: query,
-    params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    result = result.map(function(i) {
-      return new Task(i.t);
-    });
-    callback(null, result);
-  });
-
-};
 
 /**
  * @function Gibt alle weiteren Lernziele auf {depth}. Ebene des Lernziels
@@ -669,15 +478,20 @@ Target.prototype.getTargets = function(depth, callback) {
 };
 
 /**
- * @function Middleware um den Studiengang, zu dem dieses Target gehört, im Request zu speichern
+ * @function Middleware um das Hauptlernziel, zu dem dieses Lernziel gehört, im Request zu speichern
  */
-Target.prototype.getParentDegree = function(callback) {
+Target.prototype.getParentTarget = function(callback) {
 
   var self = this;
 
+  // falls dieses ein Hauptlernziel ist -> zurückgeben
+  if(this.isEntryTarget()) {
+    return callback(null, self);
+  }
+
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[r]->(d:Degree)',
-    'RETURN d'
+    'MATCH (t2:Target {uuid: {uuid}})-[r *1..]->(t:Target:EntryTarget)',
+    'RETURN t'
   ].join('\n');
 
   var params = {
@@ -689,10 +503,158 @@ Target.prototype.getParentDegree = function(callback) {
     params: params
   }, function(err, result) {
     if(err) return callback(err);
-    callback(null, new Degree(result[0].d));
+    callback(null, new Target(result[0].t));
   });
 
 };
+
+/**
+ * @function Liefert das aktuelle Konfigurationsobjekt für das Lernziel selbst
+ * In dieser Konfiguration befinden sich Informationen darüber wieviel Punkte man erhält/bezahlt werden müssen für jede Aktion
+ * Jedes Lernziel (Target) hat solch eine Konfiguration oder verwendet die Konfiguration des darüberstehenden Lernziels
+ */
+Target.prototype.getConfig = function(cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t:Target {uuid: {targetUUID}})<-[:BELONGS_TO]-(c:Config)',
+    'RETURN c'
+  ].join('\n');
+
+  var params = {
+    targetUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    if(result.length === 0) {
+      // das Lernziel hat keine eigene Config -> Config von nächsthöheren Lernziel holen
+      self.getParent(function(err, nextParent) {
+        if(err) return cb(err);
+        console.log(nextParent);
+        nextParent.getConfig(cb);
+      });
+    } else {
+      // falls es eine eigene Config hat:
+      var config = new Config(result[0].c);
+      return cb(null, config);
+    }
+  });
+
+};
+
+/**
+ * @function Gibt alle User zurück die auf die Daten dieses Lernziel zugreifen können
+ */
+Target.prototype.getUsers = function (cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t:Target:EntryTarget {uuid: {targetUUID}})<-[:HAS_ACCESS]-(u:User)',
+    'RETURN u'
+  ].join('\n');
+
+  var params = {
+    targetUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    var users = result.map(function(i) {
+      return new User(i.u);
+    });
+    return cb(null, users);
+  });
+
+};
+
+
+/**
+ * @function Gibt dem User {uuid} Zugriff auf dieses Hauptlernziel
+ * Falls es kein Hauptlernziel ist -> Fehler
+ * @param {string} userUUID UUID des Users der Zugriff bekommen soll
+ * @return true falls erfolgreich
+ */
+Target.prototype.addUser = function (userUUID, callback) {
+
+  if(!this.isEntryTarget()) {
+    var err = new Error('Neue Benutzer können nur zu Hauptlernzielen hinzugefügt werden. Dies ist kein Hauptlernziel.');
+    err.status = 409;
+    err.name = 'MissingEntryTargetStatus';
+    return callback(err);
+  }
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}}), (t:Target:EntryTarget {uuid: {targetUUID}})',
+    'CREATE UNIQUE (u)-[:HAS_ACCESS]->(t)',
+    'RETURN u,t'
+  ].join('\n');
+
+  var params = {
+    userUUID: userUUID,
+    targetUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) {
+      err = new Error('Das Lernziel `' + self.uuid + '` oder der User `' + userUUID + '` existiert nicht');
+      err.status = 404;
+      err.name = 'UserNotFound'; // im Endeffekt kann höchstens der User fehlen, da Target.prototype.addUser()
+      return callback(err);
+    } else {
+      return callback(null, true);
+    }
+  });
+
+};
+
+/**
+ * @function Überprüft ob der User Zugriff auf dieses Lernziel hat
+ * @param {string} userUUID UUID des zu überprüfenden Users
+ * @returns {boolean} true wenn der User berechtigt ist, andernfalls false
+ */
+Target.prototype.isAllowedUser = function (userUUID, callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t:Target {uuid: {targetUUID}})<-[:HAS_ACCESS]-(u:User {uuid: {userUUID}})',
+    'RETURN u'
+  ].join('\n');
+
+  var params = {
+    targetUUID: self.uuid,
+    userUUID: userUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    if(result.length === 0) {
+      callback(null, false);
+    } else {
+      callback(null, true);
+    }
+  });
+
+};
+
 
 /**
  * @function Fügt Metadaten hinzu
@@ -707,6 +669,12 @@ Target.prototype.addMetadata = function(apiVersion) {
   links.ref = base;
   links.children = base + '/children';
   links.parent = base + '/parent';
+  links.config = base + '/config';
+
+  if(this.isEntryTarget()) {
+    links.users = base + '/users';
+  }
+
   this.links = links;
 
 };

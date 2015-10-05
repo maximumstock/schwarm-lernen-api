@@ -9,9 +9,9 @@ var router = express.Router();
 var config = require('../../config/config');
 var helper = require('./helper/middleware');
 var auth = require('./auth/auth');
+var async = require('async');
 
 var Target = require('../../models/target');
-var Comment = require('../../models/comment');
 var Info = require('../../models/info');
 var Rating = require('../../models/rating');
 
@@ -32,18 +32,31 @@ router.get('/infos/:infoUUID', helper.prefetchInfo, auth.restricted, function(re
 });
 
 // Gibt Bewertung der Info zurück
+router.get('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.restricted, function(req, res, next) {
+
+  var info = req._info;
+  var user = req.user;
+
+  info.getRatings(function(err, ratings) {
+    if(err) return next(err);
+    ratings.forEach(function(r) {
+      r.addMetadata(API_VERSION);
+    });
+    res.json(ratings);
+  });
+
+});
+
+// Gibt eigene Bewertung für die Info zurück, falls eine existiert
 router.get('/infos/:infoUUID/rating', helper.prefetchInfo, auth.restricted, function(req, res, next) {
 
   var info = req._info;
   var user = req.user;
 
-  info.getRating(function(err, rating) {
+  user.getMyRatingFor(info.uuid, function(err, myrating) {
     if(err) return next(err);
-    user.getMyRatingFor(info.uuid, function(err, myrating) {
-      if(err) return next(err);
-      rating.myRating = myrating;
-      res.json(rating);
-    });
+    myrating.addMetadata(API_VERSION);
+    res.json(myrating);
   });
 
 });
@@ -63,72 +76,77 @@ router.get('/infos/:infoUUID/comments', helper.prefetchInfo, auth.restricted, fu
 });
 
 // Fügt Rating hinzu
-router.post('/infos/:infoUUID/rating', helper.prefetchInfo, auth.restricted, helper.prefetchConfig, helper.prefetchConfig, function(req, res, next) {
+router.post('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.restricted, helper.prefetchConfig, helper.prefetchConfig, function(req, res, next) {
 
-  validator
-    .validate(Rating.VALIDATION_RULES, req.body)
-    .then(function() {
+  var user = req.user;
+  var config = req._config;
+  var pack = req._package;
+  var info = req._info;
 
-      var user = req.user;
-      var config = req._config;
-
-      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
-      // falls < 0: es gibt kein Limit/keine Mindestanzahl um das Paket zu beenden
-      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
-      // falls > 0: Einstellung möglich
-      if(user.ratingsToDo !== 0) {
-
-        // überprüfe ob der Nutzer noch genug Punkte hat
-        user.hasPoints(config.ratingCost, function(err, heDoes) {
-          if(err) return next(err);
-          if(!heDoes) {
-            err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
-            err.status = 409;
-            err.name = 'MissingPoints';
-            return next(err);
-          } else {
-
-            user.rate(req.params.infoUUID, req.body, config.ratePoints, config.rateCost, config.rateMultiplier, function(err, result) {
-              if(err) return next(err);
-              res.status(201).json({success: true});
-
-              user.didWorkOnPackage({tasks: 0, infos: 0, solutions: 0, ratings: 1}, config, function(err, result) {
-                if(err) console.error(err);
-              });
-            });
-          }
-        });
-
-      } else {
-        // Nutzer muss erst Paket abarbeiten
-        var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
-        err.status = 409;
-        err.name = 'WorkPackageNotDone';
-        res.json(err);
+  // eigentliche Funktion die die Bewertung erstellt, Punkte verteilt, etc.
+  function create() {
+    Rating.create(req.body, user.uuid, info.uuid, function(err, rating) {
+      if(err) return next(err);
+      rating.addMetadata(API_VERSION);
+      // Admins brauchen keine Punkte, etc
+      if(user.isAdmin()) {
+        return res.status(201).json(rating);
       }
 
-    })
-    .catch(function(errors) {
-      return next(errors);
+      // Arbeitspaket aktualisieren
+      // Punkte an den Ersteller der Bewertung verteilen
+      // Punkte vom Ersteller der Bewertung abziehen
+      // Punkte an den Ersteller des bewerteten Inhalts verteilen
+      async.parallel([
+        function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
+        function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
+        function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
+        function(_cb) { rating.givePointsTo(info.author, {points: rating.getRating().avg, prestige: user.prestige}, _cb); }
+      ], function(errors, results) {
+        if(errors) next(errors);
+        return res.status(201).json({success: true});
+      });
     });
-
-});
-
-// Fügt Kommentar hinzu
-router.post('/infos/:infoUUID/comments', helper.prefetchInfo, auth.restricted, function(req, res, next) {
-
-  req.checkBody('comment', 'Inhalt des Kommentars fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
   }
 
-  Comment.create(req.body, req.params.infoUUID, req.user.uuid, function(err, comment) {
-    if(err) return next(err);
-    comment.addMetadata(API_VERSION);
-    res.status(201).json(comment);
-  });
+  // Admins dürfen sowieso
+  if(user.isAdmin()) {
+    create();
+  } else {
+    // der User sollte seine eigenen Inhalte nicht bewerten dürfen
+    user.hasCreated(info.uuid, function(err, hasCreated) {
+      if(err) return next(err);
+      if(hasCreated) {
+        err = new Error('Du darfst nicht deine eigenen Inhalte bewerten.');
+        err.status = 409;
+        return next(err);
+      }
 
+      // überprüfe ob der Nutzer noch Bewertungen erstellen darf
+      // falls 0: Limit erreicht, Paket muss erst abgearbeitet werden
+      if(user.ratingsToDo === 0) {
+        // Nutzer muss erst Paket abarbeiten
+        err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Bewertungen erstellen darfst');
+        err.status = 409;
+        err.name = 'WorkPackageNotDone';
+        return next(err);
+      }
+      // falls > 0: Einstellung möglich
+      // überprüfe ob der Nutzer noch genug Punkte hat
+      user.hasPoints(config.ratingCost, function(err, heDoes) {
+        if(err) return next(err);
+        if(!heDoes) {
+          err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');
+          err.status = 409;
+          err.name = 'MissingPoints';
+          return next(err);
+        }
+
+        create();
+
+      });
+    });
+  }
 });
 
 // Aufgabe an dem die Lösung hängt
@@ -162,5 +180,45 @@ router.put('/infos/:infoUUID/status', helper.prefetchInfo, auth.adminOnly, funct
 
 });
 
+/**************************************************
+              AUTHOR ONLY ROUTES
+**************************************************/
+
+// Finalisiert die Aufgabe und macht sie öffentlich
+router.put('/infos/:infoUUID/submit', helper.prefetchInfo, auth.authorOnly, function(req, res, next) {
+
+  var info = req._info;
+  var user = req.user;
+
+  info.finalize(function(err, result) {
+    if(err) return next(err);
+    Info.get(info.uuid, function(err, info) {
+      if(err) return next(err);
+      info.addMetadata(API_VERSION);
+      res.json(info);
+    });
+  });
+
+});
+
+// Aktualisiert die Info
+router.put('/infos/:infoUUID', helper.prefetchInfo, auth.authorOnly, function(req, res, next) {
+
+  var info = req._info;
+
+  if(info.isFinished()) {
+    var err = new Error('Diese Info wurde bereits abgegeben. Du kannst sie nicht mehr verändern.');
+    err.status = 409;
+    err.name = 'AlreadySubmitted';
+    return next(err);
+  }
+
+  info.patch(req.body, function(err, ninfo) {
+    if(err) return next(err);
+    ninfo.addMetadata(API_VERSION);
+    res.json(ninfo);
+  });
+
+});
 
 module.exports = router;

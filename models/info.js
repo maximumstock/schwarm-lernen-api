@@ -23,7 +23,8 @@ var moment = require('moment');
 var Node = require('./node');
 var Target = require('./target');
 var User = require('./user');
-var Degree = require('./degree');
+var Rating = require('./rating');
+
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -35,27 +36,19 @@ Info.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Info-Nodes für Info#create
 Info.VALIDATION_RULES = {
-  description: 'required|string'
+  description: 'required|string|max:2000'
 };
 
-Info.PROTECTED_ATTRIBUTES = ['createdAt', 'author', 'target'];
+Info.PROTECTED_ATTRIBUTES = ['uuid', 'createdAt', 'author', 'target'];
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
 
-/**
- * @function Propertydefinition für den Inhalt der Info
- * @prop {string} description Textinhalt der Info
- */
 Object.defineProperty(Info.prototype, 'description', {
   get: function () {
     return this.properties.description;
   }
 });
 
-/**
- * @function Propertydefinition für den Autor der Info als Userobjekt
- * @prop {object} author Autor der Info
- */
 Object.defineProperty(Info.prototype, 'author', {
   get: function () {
     return this.properties.author;
@@ -67,9 +60,8 @@ Object.defineProperty(Info.prototype, 'author', {
 // Statische Methoden
 
 /**
- * @function get Statische Gettermethode für Infos
+ * @function Statische Gettermethode für Infos
  * @param {string} uuid UUID der gesuchten Info
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
  */
 Info.get = function (uuid, callback) {
 
@@ -102,8 +94,7 @@ Info.get = function (uuid, callback) {
 };
 
 /**
- * @function get Statische Gettermethode für ALLE Infos
- * @param {callback} callback Callbackfunktion, die das Ergebnis entgegennimmt
+ * @function Statische Gettermethode für ALLE Infos
  */
 Info.getAll = function (callback) {
 
@@ -131,38 +122,33 @@ Info.getAll = function (callback) {
 };
 
 /**
- * @function
- * @name create Erstellt eine neue Info und speichert es in der Datenbank
+ * @function Erstellt eine neue Info und speichert es in der Datenbank
  * @param {object} properties Attribute der anzulegenden Node
  * @param {string} targetUUID UUID der Lernziel-Node für die die Info gilt
  * @param {string} userUUID UUID des Users, der die Info angefertigt hat
- * @param {integer} gainedPoints Anzahl der Punkte die für das Erstellen verdient werden
- * @param {integer} spentPoints Anzahl der Punkte die das Erstellen kosten soll
  */
-Info.create = function (properties, targetUUID, userUUID, gainedPoints, spentPoints, callback) {
+Info.create = function (properties, targetUUID, userUUID, callback) {
 
   // Validierung
   validator
     .validate(Info.VALIDATION_RULES, properties)
     .then(function() {
 
-      properties.createdAt = parseInt(moment().format('X'));
+      properties.createdAt = moment().format('X');
       properties.author = userUUID;
       properties.target = targetUUID;
 
       var query = [
         'MATCH (a:Target {uuid: {target}}), (u:User {uuid: {author}})',
-        'CREATE (i:Info {properties})',
-        'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(i)<-[r2:CREATED {gainedPoints: {gainedPoints}, spentPoints: {spentPoints}}]-(u)',
+        'CREATE (i:Info:Unfinished {properties})',
+        'CREATE UNIQUE (a)<-[r:BELONGS_TO]-(i)<-[r2:CREATED]-(u)',
         'return i'
       ].join('\n');
 
       var params = {
         properties: properties,
         target: targetUUID,
-        author: userUUID,
-        gainedPoints: gainedPoints,
-        spentPoints: spentPoints
+        author: userUUID
       };
 
       db.cypher({
@@ -174,10 +160,9 @@ Info.create = function (properties, targetUUID, userUUID, gainedPoints, spentPoi
 
         // falls es kein Ergebnis gibt wurde die neue Info nicht erstellt da es keinen passenden Autor oder Target gibt
         if (result.length === 0) {
-          err = new Error('Das Target `' + targetUUID + '` existiert nicht');
+          err = new Error('Das Lernziel `' + targetUUID + '` existiert nicht');
           err.status = 404;
           err.name = 'TargetNotFound';
-
           return callback(err);
         }
 
@@ -199,6 +184,60 @@ Info.create = function (properties, targetUUID, userUUID, gainedPoints, spentPoi
 };
 
 // Instanzmethoden
+
+/**
+ * @function Aktualisiert die Info mit den Daten aus dem {properties} Objekt
+ * @param {object} properties Objekt mit neuen Daten für die Info
+ */
+Info.prototype.patch = function(properties, cb) {
+
+  var self = this;
+
+  Info.PROTECTED_ATTRIBUTES.forEach(function(i) {
+    if(properties.hasOwnProperty(i)) delete properties[i];
+  });
+
+  properties.changedAt = moment().format('X');
+
+  // Validierung
+  validator
+    .validate(Info.VALIDATION_RULES, properties)
+    .then(function() {
+
+      var query = [
+        'MATCH (i:Info:Unfinished {uuid: {infoUUID}})',
+        'SET i += {properties}',
+        'RETURN i'
+      ].join('\n');
+
+      var params = {
+        infoUUID: self.uuid,
+        properties: properties
+      };
+
+      db.cypher({
+        query: query,
+        params: params
+      }, function(err, result) {
+        if(err) return cb(err);
+        if(result.length === 0) {
+          // Info `infoUUID` existiert nicht oder ist nicht mehr veränderbar
+          err = new Error('Die Info `'+self.uuid+'` existiert nicht oder ist nicht mehr änderbar');
+          err.status = 409;
+          err.name = 'AlreadySubmitted';
+          return cb(err);
+        }
+        var info = new Info(result[0].i);
+        return cb(null, info);
+      });
+
+    })
+    .catch(function(err) {
+      return cb(err);
+    });
+
+};
+
 
 /**
  * @function Gibt zugehöriges Target zu dieser Info zurück
@@ -232,13 +271,13 @@ Info.prototype.getParent = function (callback) {
 /**
  * @function Middleware um den Studiengang, zu dem diese Info gehört, im Request zu speichern
  */
-Info.prototype.getParentDegree = function(callback) {
+Info.prototype.getParentTarget = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF]->(d:Degree)',
-    'RETURN d'
+    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'RETURN et'
   ].join('\n');
 
   var params = {
@@ -249,7 +288,37 @@ Info.prototype.getParentDegree = function(callback) {
     query: query,
     params: params
   }, function(err, result) {
-    callback(err, new Degree(result[0].d));
+    callback(err, new Target(result[0].et));
+  });
+
+};
+
+/**
+ * @function Liefert alle Bewertungen einer Info, falls welche bestehen
+ */
+Info.prototype.getRatings = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (n {uuid: {selfUUID}})<-[:RATES]-(r:Rating)',
+    'RETURN r'
+  ].join('\n');
+
+  var params = {
+    selfUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    var ratings = result.map(function(i) {
+      var r = new Rating(i.r);
+      return r;
+    });
+    return callback(null, ratings);
   });
 
 };
@@ -260,15 +329,25 @@ Info.prototype.getParentDegree = function(callback) {
  */
 Info.prototype.addMetadata = function (apiVersion) {
 
+  // Autor soll anonym sein
+  if(this.properties.author) {
+    delete this.properties.author;
+  }
+
   apiVersion = apiVersion ||  '';
   var base = apiVersion + '/infos/' + encodeURIComponent(this.uuid);
 
   var links = {};
   links.ref = base;
-  links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
+  //links.author = apiVersion + '/users/' + encodeURIComponent(this.properties.author);
   links.target = apiVersion + '/targets/' + encodeURIComponent(this.properties.target);
+  links.ratings = base + '/ratings';
   links.rating = base + '/rating';
-  links.comments = base + '/comments';
+  links.status = base + '/status';
+  // falls die Aufgabe `unfinished` ist, kann man sie unter folgender URL abgeben
+  if(!this.isFinished()) {
+    links.submit = base + '/submit';
+  }
 
   this.links = links;
 

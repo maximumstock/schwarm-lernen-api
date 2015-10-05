@@ -1,8 +1,10 @@
 // cleanup
 match (n) optional match (n)-[r]-() delete r,n;
 
-// Degree
-create (d:Degree {name: "Informatik"})<-[:BELONGS_TO]-(c:Config {taskShare: 35, infoShare: 15, solutionShare: 50, infoPoints: 1, taskPoints: 2, solutionPoints: 3, ratePoints: 1, rateMultiplier: 1});
+// Hauptlernziel
+create (t:Target:EntryTarget {name: "Informatik"});
+match (t:Target:EntryTarget) create (t)<-[:BELONGS_TO]-(c:Config {packageSize: 10, taskShare: 0.25, infoShare: 0.15, solutionShare: 0.50, rateShare: 0.1, tasksToDo: 2, solutionsToDo: 4, ratingsToDo: 5, infosToDo: 4, infoPoints: 1, taskPoints: 2, solutionPoints: 3, ratePoints: 1, rateMultiplier: 1});
+
 // 10 Targets für Informatik
 match (d:Degree) with range(1,10) as RANGE, d foreach(r in RANGE | create (n:Target)-[:PART_OF]->(d));
 // 3 Targets pro Level1-Target (10*3 + 10)
@@ -17,10 +19,10 @@ match (d:Degree) with range(1,10) as RANGE, d foreach(r in RANGE | create (n:Tar
 ////////////////////////////////////////////////////////////////////////////////////////
 // TEST STUFF
 // DELETE IN PRODUCTION
-match (d:Degree)
+match (t:Target:EntryTarget)
 create
-  (u:User:Admin {username: "admin", password: "admin"})-[:HAS_ACCESS]->(d),
-  (u2:User {username: "bene", password: "bene"})-[:HAS_ACCESS]->(d),
+  (u:User:Admin {username: "admin", password: "admin"})-[:HAS_ACCESS]->(t),
+  (u2:User {username: "bene", password: "bene"})-[:HAS_ACCESS]->(t),
   (u3:User {username: "test", password: "test"});
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -43,11 +45,11 @@ create
 //match (u:User)-[:CREATED]->()<-[r:RATES]-(u) delete r;
 
 // mehrfache Lösungen löschen (anscheinend nicht nötig)
-match (u:User)-[r1:CREATED]->(s:Solution)<-[r2:SOLVES]-(t:Task)
-with collect(r1)[1..] as rels1, collect(r2)[1..] as rels2, collect(s)[1..] as solutions
-foreach (r in rels1 | delete r)
-foreach (r in rels2 | delete r)
-foreach (s in solutions | delete s);
+//match (u:User)-[r1:CREATED]->(s:Solution)<-[r2:SOLVES]-(t:Task)
+//foreach (r in rels1 | delete r)
+//with collect(r1)[1..] as rels1, collect(r2)[1..] as rels2, collect(s)[1..] as solutions
+//foreach (r in rels2 | delete r)
+//foreach (s in solutions | delete s);
 
 // User ohne Zugang
 //with range(1,5) as RANGE foreach(r in RANGE | create (u:User {username: toint(rand()*100)}));

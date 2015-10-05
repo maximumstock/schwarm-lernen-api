@@ -4,29 +4,11 @@
  * @file Hier sind Middleware Funktionen zum Vereinfachen einiger Auflösungsprozesse von URLs definiert
  */
 
-var Degree = require('../../../models/degree');
 var Target = require('../../../models/target');
 var Task = require('../../../models/task');
 var Solution = require('../../../models/solution');
 var Info = require('../../../models/info');
-var Comment = require('../../../models/comment');
-
-
-/**
- * @function Middleware die den gesuchten Studiengang-Lernziel-Pfad direkt auflöst und das Lernziel-Objekt im Request platziert.
- * Dies spart Code in der eigentlichen Endpunkt-Implementierung.
- * Diese Middleware wird nur genutzt wenn URLs mit /degrees/:degreeUUID/targets/:targetUUID beginnen.
- */
-exports.prefetchDegree = function(req, res, next) {
-
-  Degree.get(req.params.degreeUUID, function(err, degree) {
-    if(err) return next(err);
-    req._degree = degree;
-    req._checker = degree;
-    next();
-  });
-
-};
+var Rating = require('../../../models/rating');
 
 /**
  * @function Middleware die den gesuchten Studiengang-Lernziel-Pfad direkt auflöst und das Lernziel-Objekt im Request platziert.
@@ -80,13 +62,13 @@ exports.prefetchInfo = function(req, res, next) {
 
 };
 
-// siehe exports.prefetchTarget, jedoch für Kommentare
-exports.prefetchComment = function(req, res, next) {
+// siehe exports.prefetchTarget, jedoch für Ratings
+exports.prefetchRating = function(req, res, next) {
 
-  Comment.get(req.params.commentUUID, function(err, comment) {
+  Rating.get(req.params.ratingUUID, function(err, rating) {
     if(err) return next(err);
-    req._comment = comment;
-    req._checker = comment;
+    req._rating = rating;
+    req._checker = rating;
     next();
   });
 
@@ -103,13 +85,37 @@ exports.prefetchConfig = function(req, res, next) {
     return next(err);
   }
 
-  req._checker.getParentDegree(function(err, degree) {
+  req._checker.getParentTarget(function(err, target) {
     if(err) return next(err);
-    degree.getConfig(function(err, config) {
+    target.getConfig(function(err, config) {
       if(err) return next(err);
       req._config = config;
       next();
     });
+  });
+
+};
+
+// Helferfunktion, die das aktuelle Arbeitspaket des Users (req.user) in req._package speichert
+exports.prefetchPackage = function(req, res, next) {
+
+  if(!req.user) {
+    var err = new Error('exports.prefetchPackage-Middleware sollte nicht standalone verwendet werden');
+    err.status = 500;
+    err.name = 'N00bAdmin';
+    return next(err);
+  }
+
+  // Admins haben keine Arbeitspakete
+  if(req.user.isAdmin()) {
+    return next();
+  }
+
+  var user = req.user;
+  user.getPackage(function(err, workpackage) {
+    if(err) return next(err);
+    req._package = workpackage;
+    return next();
   });
 
 };

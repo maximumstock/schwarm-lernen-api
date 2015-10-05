@@ -24,6 +24,13 @@ app.use(bodyParser.urlencoded({
 app.use(validator());
 app.use(compression()); // Gzip Kompression
 
+// immer mit Content-Type application/json antworten da JSON-only
+app.use(function(req, res, next) {
+  res.set('Content-Type', 'application/json');
+  res.set('X-Content-Type-Options', 'nosniff'); // Damit IE kein JSON als HTML missversteht
+  next();
+});
+
 // Konfigurationsdatei laden
 var config = require('./config/config');
 
