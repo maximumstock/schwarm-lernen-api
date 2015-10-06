@@ -88,7 +88,7 @@ router.get('/self/tasks/created/finished', function(req, res, next) {
     tasks.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    tasks = tasks.map(function(t) {
+    tasks = tasks.filter(function(t) {
       return t.isFinished();
     });
     res.json(tasks);
@@ -105,7 +105,7 @@ router.get('/self/tasks/created/inactive', function(req, res, next) {
     tasks.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    tasks = tasks.map(function(t) {
+    tasks = tasks.filter(function(t) {
       return !t.isActive();
     });
     res.json(tasks);
@@ -167,7 +167,7 @@ router.get('/self/solutions/finished', function(req, res, next) {
     solutions.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    solutions = solutions.map(function(s) {
+    solutions = solutions.filter(function(s) {
       return s.isFinished();
     });
     res.json(solutions);
@@ -184,7 +184,7 @@ router.get('/self/solutions/inactive', function(req, res, next) {
     solutions.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    solutions = solutions.map(function(s) {
+    solutions = solutions.filter(function(s) {
       return !s.isActive();
     });
     res.json(solutions);
@@ -234,7 +234,7 @@ router.get('/self/infos/finished', function(req, res, next) {
     infos.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    infos = infos.map(function(i) {
+    infos = infos.filter(function(i) {
       return i.isFinished();
     });
     res.json(infos);
@@ -251,7 +251,7 @@ router.get('/self/infos/finished', function(req, res, next) {
     infos.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    infos = infos.map(function(i) {
+    infos = infos.filter(function(i) {
       return !i.isActive();
     });
     res.json(infos);
