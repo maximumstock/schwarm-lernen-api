@@ -24,17 +24,23 @@ router.get('/self', function(req, res, next) {
     tasks: {
       created: {
         all: API_VERSION + '/self/tasks/created',
-        unfinished: API_VERSION + '/self/tasks/created/unfinished'
+        unfinished: API_VERSION + '/self/tasks/created/unfinished',
+        finished: API_VERSION + '/self/tasks/created/finished',
+        inactive: API_VERSION + '/self/tasks/created/inactive'
       },
       solved: API_VERSION + '/self/tasks/solved'
     },
     solutions: {
       all: API_VERSION + '/self/solutions',
-      unfinished: API_VERSION + '/self/solutions/unfinished'
+      unfinished: API_VERSION + '/self/solutions/unfinished',
+      finished: API_VERSION + '/self/solutions/finished',
+      inactive: API_VERSION + '/self/solutions/inactive'
     },
     infos: {
       all: API_VERSION + '/self/infos',
-      unfinished: API_VERSION + '/self/infos/unfinished'
+      unfinished: API_VERSION + '/self/infos/unfinished',
+      finished: API_VERSION + '/self/infos/finished',
+      inactive: API_VERSION + '/self/infos/inactive'
     },
     points: API_VERSION + '/self/points',
     prestige: API_VERSION + '/self/prestige',
@@ -42,6 +48,9 @@ router.get('/self', function(req, res, next) {
   });
 });
 
+/****************************************************
+*                     TASKS                         *
+****************************************************/
 // Alle selbst erstellten Aufgaben des aktuellen Users
 router.get('/self/tasks/created', function(req, res, next) {
 
@@ -57,13 +66,47 @@ router.get('/self/tasks/created', function(req, res, next) {
 });
 
 // Alle selbst erstellten Aufgaben des aktuellen Users, die noch nicht abgegeben wurden
-router.get('/self/tasks/created/unfinished', function(req, res, next) {
+router.get('/self/tasks/created/unfinished', function (req, res, next) {
 
   var user = req.user;
-  user.getOwnUnfinishedTasks(function(err, tasks) {
+  user.getOwnUnfinishedTasks(function (err, tasks) {
+    if (err) return next(err);
+    tasks.forEach(function (i) {
+      i.addMetadata(API_VERSION);
+    });
+    res.json(tasks);
+  });
+
+});
+
+// Alle selbst erstellten Aufgaben des aktuellen Users, die bereits abgegeben wurden
+router.get('/self/tasks/created/finished', function(req, res, next) {
+
+  var user = req.user;
+  user.getOwnTasks(function(err, tasks) {
     if(err) return next(err);
     tasks.forEach(function(i) {
       i.addMetadata(API_VERSION);
+    });
+    tasks = tasks.map(function(t) {
+      return t.isFinished();
+    });
+    res.json(tasks);
+  });
+
+});
+
+// Alle selbst erstellten Aufgaben des aktuellen Users, die deaktiviert wurden
+router.get('/self/tasks/created/inactive', function(req, res, next) {
+
+  var user = req.user;
+  user.getOwnTasks(function(err, tasks) {
+    if(err) return next(err);
+    tasks.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    tasks = tasks.map(function(t) {
+      return !t.isActive();
     });
     res.json(tasks);
   });
@@ -84,6 +127,9 @@ router.get('/self/tasks/solved', function(req, res, next) {
 
 });
 
+/****************************************************
+*                     SOLUTIONS                     *
+****************************************************/
 // Alle selbst erstellten Lösungen des aktuellen Users
 router.get('/self/solutions', function(req, res, next) {
 
@@ -112,6 +158,45 @@ router.get('/self/solutions/unfinished', function(req, res, next) {
 
 });
 
+// Alle selbst erstellten Lösungen des aktuellen Users, die bereits abgegeben wurden
+router.get('/self/solutions/finished', function(req, res, next) {
+
+  var user = req.user;
+  user.getSolutions(function(err, solutions) {
+    if(err) return next(err);
+    solutions.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    solutions = solutions.map(function(s) {
+      return s.isFinished();
+    });
+    res.json(solutions);
+  });
+
+});
+
+// Alle selbst erstellten Lösungen des aktuellen Users, die deaktiviert wurden
+router.get('/self/solutions/inactive', function(req, res, next) {
+
+  var user = req.user;
+  user.getSolutions(function(err, solutions) {
+    if(err) return next(err);
+    solutions.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    solutions = solutions.map(function(s) {
+      return !s.isActive();
+    });
+    res.json(solutions);
+  });
+
+});
+
+
+/****************************************************
+*                     INFOS                         *
+****************************************************/
+
 // Alle selbst erstellten Infos des aktuellen Users
 router.get('/self/infos', function(req, res, next) {
 
@@ -134,6 +219,40 @@ router.get('/self/infos/unfinished', function(req, res, next) {
     if(err) return next(err);
     infos.forEach(function(i) {
       i.addMetadata(API_VERSION);
+    });
+    res.json(infos);
+  });
+
+});
+
+// Alle selbst erstellten Infos des aktuellen Users, die bereits abgegeben wurden
+router.get('/self/infos/finished', function(req, res, next) {
+
+  var user = req.user;
+  user.getInfos(function(err, infos) {
+    if(err) return next(err);
+    infos.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    infos = infos.map(function(i) {
+      return i.isFinished();
+    });
+    res.json(infos);
+  });
+
+});
+
+// Alle selbst erstellten Infos des aktuellen Users, die deaktiviert wurden
+router.get('/self/infos/finished', function(req, res, next) {
+
+  var user = req.user;
+  user.getInfos(function(err, infos) {
+    if(err) return next(err);
+    infos.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    infos = infos.map(function(i) {
+      return !i.isActive();
     });
     res.json(infos);
   });
