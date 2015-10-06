@@ -7,9 +7,14 @@
 var neo4j = require('neo4j');
 
 var DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'admin';
+var AUTH = '';
+
+if(process.env.USERNAME && process.env.PASSWORD) {
+  AUTH = process.env.USERNAME + ':' + process.env.PASSWORD + '@';
+}
 
 var db = new neo4j.GraphDatabase({
-  url: 'http://localhost:7474/graphaware'
+  url: 'http://'+AUTH+'localhost:7474/graphaware'
 });
 
 var query = [

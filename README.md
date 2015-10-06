@@ -40,8 +40,8 @@ Alle Aufgaben, Infos und Lösungen haben einen Aktivitätsstatus, der als Proper
 nicht zur Erfüllung von Arbeitspaketen oder dem Gesamtkontostand eines Nutzers dazugezählt.
 
 ### Punktekonzept
-Jeder Benutzer sammelt <s>beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch</s> für das Bewerten von fremden Inhalten Punkte.
-Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <s>für die einzelnen Aktionen <s>verdient und bezahlt werden.
+Jeder Benutzer sammelt <s>beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch</s> für das Bewerten von fremden Inhalten Punkte. Mit diesen Punkten
+Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <s>für die einzelnen Aktionen </s>verdient und bezahlt werden.
 
 
 ---
@@ -49,7 +49,7 @@ Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <
 * ***NEW*** `GET /targets` - Public - Liefert alle Hauptlernziele (`EntryTargets`)
 * `GET /targets/:targetUUID` - AccessRestricted - Ein bestimmtes Lernziel mit der ID `:targetUUID`
 * `GET /targets/:targetUUID/parent` - AccessRestricted - Die Vaternode des Lernziels
-* `GET /targets/:targetUUID/children` - AccessRestricted - Liefert alle Kind-Nodes des Lernziels `:targetUUID` sortiert nach **Tasks**, **Infos** und **Targets**
+* `GET /targets/:targetUUID/children` - AccessRestricted - Liefert alle Kind-Nodes des Lernziels `:targetUUID` sortiert nach **Tasks**, **Infos** (welche bereits per `/submit` abgegeben wurden) und **Targets**
 * **NEW** `GET /targets/:targetUUID/config` - AccessRestricted - Liefert die Konfiguration des Lernziels bzw. die globale Konfiguration falls `:targetUUID` keine eigene Konfiguration hat
 * `GET /targets/:targetUUID/users` - AccessRestricted - Liefert Liste alle Nutzer die auf dieses Lernziel Zugriff haben. Falls `:targetUUID` kein Hauptlernziel/EntryTarget ist, wird momentan ein leeres Array zurückgeliefert, da die Zugriffssteuerung über das verantwortliche Hauptlernziel läuft
 * **NEW** `POST /targets` - AdminOnly - Erstellt ein neues Hauptlernziel
@@ -57,9 +57,13 @@ Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <
 * `POST /targets/:targetUUID/targets` - AdminOnly - Erstellt ein neues Lernziel unter dem Lernziel `:targetUUID`
 	* name - String - Name des neuen Lernziels - Max. Länge 50 Zeichen
 * `POST /targets/:targetUUID/tasks` - AccessRestricted - Erstellt eine neue Aufgabe unter dem Lernziel `:targetUUID`
-	* description - String - Inhalt der neuen Aufgabe - Max. Länge 2000 Zeichen
+	* description - String - Kurzbeschreibung/Titel der neuen Aufgabe - Max. Länge 200 Zeichen
+	* text - String - Inhalt der neuen Aufgabe - Max. Länge 2000 Zeichen
+	* sources - String - Quellen der neuen Aufgabe - Max. Länge 1000
 * `POST /targets/:targetUUID/infos` - AccessRestricted - Erstellt eine neue Info unter dem Lernziel `:targetUUID`
-	* description - String - Inhalt der neuen Aufgabe
+	* description - String - Kurzbeschreibung/Titel der neuen Info - Max. Länge 200 Zeichen
+	* text - String - Inhalt der neuen Info - Max. Länge 2000 Zeichen
+	* sources - String - Quellen der neuen Info - Max. Länge 1000
 * **NEW** `PUT /targets/:targetUUID` - AdminOnly - Aktualsiert das Lernziel mit der ID `:targetUUID`
 * **NEW** `PUT /targets/:targetUUID/users` - AdminOnly - Generiert neue Accounts die Zugriff auf `:targetUUID` erhalten
 	* amount - Integer - Anzahl an zu generierenden Usern - Max. 50 gleichzeitig
@@ -89,13 +93,15 @@ Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <
 * `GET /tasks/:taskUUID/ratings` - AccessRestricted - Liefert alle Bewertungen der Aufgabe `:taskUUID`
 * **NEW** `GET /tasks/:taskUUID/rating` - AccessRestricted - Liefert die eigene Bewertung für die Aufgabe `:taskUUID`, falls keine besteht **404**
 * `GET /tasks/:taskUUID/solution` - AccessRestricted - Liefert die eine bestehende Lösung für den aktuellen User, falls keine besteht **404**
-* `GET /tasks/:taskUUID/solutions` - AccessRestricted - Alle Lösungen zur Aufgabe `:taskUUID`
+* `GET /tasks/:taskUUID/solutions` - AccessRestricted - Alle bereits abgegebenen Lösungen zur Aufgabe `:taskUUID`
 * **NEW** `POST /tasks/:taskUUID/ratings` - AccessRestricted - Neue Bewertung zur Aufgabe `:taskUUID` abgeben
 	* values - Array - Array aus Integern, die die Einzelbewertungen für verschiedene Kriterien darstellen
 	* names - Array - Array aus Strings mit den Bezeichnungen der einzelnen Kriterien
 	* comment - String - Zusatzkommentar zur Bewertung - Max. Länge 1000 Zeichen
 * `POST /tasks/:taskUUID/solutions` - AccessRestricted - Neue Lösung für die Aufgabe `:taskUUID`
-	* description - String - Inhalt der Lösung - Max. Länge 2000 Zeichen
+	* description - String - Kurzbeschreibung/Titel der neuen Lösung - Max. Länge 200 Zeichen
+	* text - String - Inhalt der neuen Lösung - Max. Länge 2000 Zeichen
+	* sources - String - Quellen der neuen Lösung - Max. Länge 1000
 * **NEW** `PUT /tasks/:taskUUID` - AuthorOnly - Aktualisiert die Aufgabe
 * `PUT /tasks/:taskUUID/status` - AdminOnly - Toggled den Aktivitätsstatus der Aufgabe
 * **NEW** `PUT /tasks/:taskUUID/submit` - AuthorOnly - Gibt die Aufgabe ab, macht sie unveränderbar

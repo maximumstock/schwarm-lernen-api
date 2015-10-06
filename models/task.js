@@ -36,7 +36,9 @@ Task.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Aufgabe-Nodes für Aufgabe#create
 Task.VALIDATION_RULES = {
-  description: 'required|string|max:2000'
+  description: 'required|string|max:200',
+  sources: 'required|string|max:1000',
+  text: 'required|string|max:2000'
 };
 
 Task.PROTECTED_ATTRIBUTES = ['uuid', 'createdAt', 'author', 'target'];

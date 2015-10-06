@@ -40,8 +40,8 @@ User.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Kommentar-Nodes für Comment#create
 User.VALIDATION_RULES = {
-  username: 'required|string|alpha_numeric|min:'+config.DEFAULT_USERNAME_LENGTH,
-  password: 'required|string|alpha_numeric|min:'+config.DEFAULT_PASSWORD_LENGTH
+  username: 'required|string|alpha_numeric|min:' + config.DEFAULT_USERNAME_LENGTH,
+  password: 'required|string|alpha_numeric|min:' + config.DEFAULT_PASSWORD_LENGTH
 };
 
 // Öffentliche Instanzvariablen mit Gettern und Settern
@@ -61,7 +61,7 @@ Object.defineProperty(User.prototype, 'password', {
 });
 
 Object.defineProperty(User.prototype, 'prestige', {
-  get: function() {
+  get: function () {
     return this.properties.prestige || 1; // 1 ist Default Wert
   }
 });
@@ -155,7 +155,7 @@ User.get = function (uuid, callback) {
  * @function findByUsername Statische Gettermethode für User per Username
  * @param {string} username gesuchter Username
  */
-User.findByUsername = function(username, callback) {
+User.findByUsername = function (username, callback) {
 
   var query = [
     'MATCH (u:User {username: {username}})',
@@ -212,7 +212,7 @@ User.getAll = function (callback) {
  * @function Überprüft ob der User mit dem entsprechenden Usernamen bereits besteht
  * @param {string} username Zu überprüfender Username
  */
-User.isValidUsername = function(username, callback) {
+User.isValidUsername = function (username, callback) {
 
   var query = [
     'MATCH (x:User {username: {username}})',
@@ -226,9 +226,9 @@ User.isValidUsername = function(username, callback) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    if(result.length === 0) return callback(null, true);
+  }, function (err, result) {
+    if (err) return callback(err);
+    if (result.length === 0) return callback(null, true);
     return callback(null, false);
   });
 
@@ -238,16 +238,16 @@ User.isValidUsername = function(username, callback) {
  * @function Generiert {number} username-password Kombinationen
  * @param {int} number Anzahl an zu generierenden Kombinationen
  */
-User.generate = function(number, callback) {
+User.generate = function (number, callback) {
 
-  if(typeof(number) !== 'number') {
+  if (typeof (number) !== 'number') {
     var err = new Error('User.generate muss mit einem Ganzzahlwert aufgerufen werden');
     err.status = 400;
     err.name = 'N00bUser';
     return callback(err);
   }
 
-  if(number > 50) {
+  if (number > 50) {
     var err2 = new Error('Es können maximal 50 Accounts gleichzeitig angelegt werden');
     err2.status = 400;
     err2.name = 'N00bUser';
@@ -255,7 +255,7 @@ User.generate = function(number, callback) {
   }
 
   var accounts = [];
-  for(var i = 0; i < number; i++) {
+  for (var i = 0; i < number; i++) {
     accounts.push({
       username: pwgen(config.DEFAULT_USERNAME_LENGTH),
       password: pwgen(config.DEFAULT_PASSWORD_LENGTH)
@@ -264,28 +264,28 @@ User.generate = function(number, callback) {
 
   // überprüfe ob usernamen unique sind
   _.uniq(accounts, 'username');
-  if(accounts.length !== number) {
+  if (accounts.length !== number) {
     // min. 1 username wurde doppelt generiert
     return User.generate(number, callback); // einfach nochmal probieren
   }
 
   // überprüfen ob Usernamen valide sind (aka noch nicht verwendet sind)
   // alle Usernames mit User.isValidUsername überprüfen
-  var todo = accounts.map(function(i) {
-    return function(cb) {
+  var todo = accounts.map(function (i) {
+    return function (cb) {
       User.isValidUsername(i.username, cb);
     };
   });
 
-  async.parallel(todo, function(err, result) {
-    if(err) return callback(err);
+  async.parallel(todo, function (err, result) {
+    if (err) return callback(err);
     // falls alle Usernames valide sind, ist result in Array von {number} true-Werten
     // falls ein false dabei ist -> nochmal probieren
     var b = true;
-    result.forEach(function(i) {
+    result.forEach(function (i) {
       b = b & i;
     });
-    if(b === false) {
+    if (b === false) {
       return User.generate(number, callback);
     }
     callback(null, accounts);
@@ -303,12 +303,12 @@ User.create = function (properties, callback) {
   // Validierung
   validator
     .validate(User.VALIDATION_RULES, properties)
-    .then(function() {
+    .then(function () {
 
       // gewählten Nutzernamen überprüfen
-      User.isValidUsername(properties.username, function(err, bool) {
-        if(err) return callback(err);
-        if(!bool) {
+      User.isValidUsername(properties.username, function (err, bool) {
+        if (err) return callback(err);
+        if (!bool) {
           // Username bereits verwendet
           err = new Error('Username `' + properties.username + '` wird bereits verwendet');
           err.status = 409;
@@ -348,7 +348,7 @@ User.create = function (properties, callback) {
       });
 
     })
-    .catch(function(errors) {
+    .catch(function (errors) {
       return callback(errors);
     });
 
@@ -386,7 +386,36 @@ User.prototype.getInfos = function (callback) {
     params: params
   }, function (err, result) {
     if (err) return callback(err);
-    result = result.map(function(i) {
+    result = result.map(function (i) {
+      return new Info(i.i);
+    });
+    callback(null, result);
+  });
+
+};
+
+/**
+ * @function Gibt alle Infos zurück, die dieser User erstellt hat aber noch nicht abgegeben hat
+ */
+User.prototype.getUnfinishedInfos = function (callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {uuid}})-[:CREATED]->(i:Info:Unfinished)',
+    'RETURN i'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function (err, result) {
+    if (err) return callback(err);
+    result = result.map(function (i) {
       return new Info(i.i);
     });
     callback(null, result);
@@ -415,13 +444,43 @@ User.prototype.getOwnTasks = function (callback) {
     params: params
   }, function (err, result) {
     if (err) return callback(err);
-    result = result.map(function(i) {
+    result = result.map(function (i) {
       return new Task(i.t);
     });
     callback(null, result);
   });
 
 };
+
+/**
+ * @function Gibt alle Aufgaben zurück, die dieser User erstellt hat aber noch nicht abgegeben hat
+ */
+User.prototype.getOwnUnfinishedTasks = function (callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {uuid}})-[:CREATED]->(t:Task:Unfinished)',
+    'RETURN t'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function (err, result) {
+    if (err) return callback(err);
+    result = result.map(function (i) {
+      return new Task(i.t);
+    });
+    callback(null, result);
+  });
+
+};
+
 
 /**
  * @function Gibt alle Aufgaben zurück, die dieser User bearbeitet hat (egal ob Lösung bewertet oder nicht)
@@ -444,7 +503,7 @@ User.prototype.getSolvedTasks = function (callback) {
     params: params
   }, function (err, result) {
     if (err) return callback(err);
-    result = result.map(function(i) {
+    result = result.map(function (i) {
       return new Task(i.t);
     });
     callback(null, result);
@@ -456,7 +515,7 @@ User.prototype.getSolvedTasks = function (callback) {
  * @function Gibt alle Aufgaben zurück, die dieser User im Lernziel `targetUUID` bearbeitet hat
  * @param {string} targetUUID UUID des Lernziels auf die die Suche beschränkt werden soll
  */
-User.prototype.getSolvedTasksByTarget = function(targetUUID, callback) {
+User.prototype.getSolvedTasksByTarget = function (targetUUID, callback) {
 
   var self = this;
 
@@ -473,9 +532,9 @@ User.prototype.getSolvedTasksByTarget = function(targetUUID, callback) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    result = result.map(function(i) {
+  }, function (err, result) {
+    if (err) return callback(err);
+    result = result.map(function (i) {
       return new Task(i.t);
     });
     callback(null, result);
@@ -487,7 +546,7 @@ User.prototype.getSolvedTasksByTarget = function(targetUUID, callback) {
  * @function Liefert eine Lösung des Users aufgrund einer Aufgaben-UUID
  * @param {string} taskUUID UUID der Aufgabe
  */
-User.prototype.getSolutionByTask = function(taskUUID, callback) {
+User.prototype.getSolutionByTask = function (taskUUID, callback) {
 
   var self = this;
 
@@ -504,9 +563,9 @@ User.prototype.getSolutionByTask = function(taskUUID, callback) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    if(result.length === 0) {
+  }, function (err, result) {
+    if (err) return callback(err);
+    if (result.length === 0) {
       err = new Error('Du hast noch keine Lösung für diese Aufgabe');
       err.status = 404;
       err.name = 'SolutionNotFound';
@@ -520,7 +579,7 @@ User.prototype.getSolutionByTask = function(taskUUID, callback) {
 /**
  * @function Liefert alle Lösungen des Users
  */
-User.prototype.getSolutions = function(callback) {
+User.prototype.getSolutions = function (callback) {
 
   var self = this;
 
@@ -536,9 +595,38 @@ User.prototype.getSolutions = function(callback) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return callback(err);
-    var solutions = result.map(function(i) {
+  }, function (err, result) {
+    if (err) return callback(err);
+    var solutions = result.map(function (i) {
+      return new Solution(i.s);
+    });
+    callback(null, solutions);
+  });
+
+};
+
+/**
+ * @function Liefert alle Lösungen des Users, die noch nicht abgegeben wurden
+ */
+User.prototype.getUnfinishedSolutions = function (callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(s:Solution:Unfinished)',
+    'RETURN s'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function (err, result) {
+    if (err) return callback(err);
+    var solutions = result.map(function (i) {
       return new Solution(i.s);
     });
     callback(null, solutions);
@@ -551,17 +639,17 @@ User.prototype.getSolutions = function(callback) {
  * Als `inaktiv` markierte Nodes sind hierbei ausgenommen
  * @returns Ein Objekt mit den Punkten für Aufgaben, Lösungen, Infos
  */
-User.prototype.getPoints = function(callback) {
+User.prototype.getPoints = function (callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (u:User {uuid: {userUUID}})<-[r:GIVES_POINTS]-(n) WHERE NOT n:Inactive',
+    'MATCH (u:User {uuid: {userUUID}})<-[r:GIVES_POINTS]-(n) WHERE NOT n:Inactive AND NOT n:Unfinished',
     'RETURN collect(r) as r'
   ].join('\n');
 
   var query2 = [
-    'MATCH (u:User {uuid: {userUUID}})<-[r:COSTS_POINTS]-(n) WHERE NOT n:Inactive',
+    'MATCH (u:User {uuid: {userUUID}})<-[r:COSTS_POINTS]-(n) WHERE NOT n:Inactive AND NOT n:Unfinished',
     'RETURN collect(r) as r'
   ].join('\n');
 
@@ -575,36 +663,42 @@ User.prototype.getPoints = function(callback) {
   }, {
     query: query2,
     params: params
-  }], function(err, result) {
-    if(err) return callback(err);
+  }], function (err, result) {
+    if (err) return callback(err);
 
     var points = {
       spent: 0,
       gained: 0
     };
 
-    var gains = result[0][0].r, costs = result[1][0].r;
+    var gains = result[0][0].r,
+      costs = result[1][0].r;
 
     // gesammelte Punkte zusammenzählen
-    var sum = 0, num = 0, prestigeSum = 0;
-    for(var i = 0; i < gains.length; i++) {
+    var sum = 0,
+    num = 0,
+    prestigeSum = 0;
+    for (var i = 0; i < gains.length; i++) {
       // fürs erste werden nur die :GIVES_POINTS Relationen beachtet, welche von Bewertungen eigener Inhalte stammen
       // alle anderen :GIVES_POINTS Relationen (z.B. für das Einstellen von Aufgaben), können ohne Prestigewert nicht so einfach verrechnet werden
-      // Rechenbeispiel: Bei zwei Bewertungen (3 Punkte bei 4 Prestige und 2 Punkte bei 5 Prestige): (3P * 4R + 2P * 5R) / ((4R +5R) * 2)
-      if(gains[i].properties.points && gains[i].properties.prestige) {
+      // Rechenbeispiel: Bei zwei Bewertungen (3 Punkte bei 4 Prestige und 2 Punkte bei 5 Prestige): (3P * 4R * x + 2P * 5R * y) / (4R + 5R)
+      // wobei x und y die jeweilige Anzahl an Punkten ist, die zu dem Zeitpunkt laut Konfiguration maximal für einen Contenttyp (Aufgabe, Lösung, Inhalt)
+      // erreichbar ist
+      if (gains[i].properties.points && gains[i].properties.prestige && gains[i].properties.maxpoints) {
         num++;
         prestigeSum += gains[i].properties.prestige;
-        sum += gains[i].properties.points * gains[i].properties.prestige;
+        sum += gains[i].properties.points * gains[i].properties.prestige * gains[i].properties.maxpoints; // durch `maxpoints`
       }
     }
-    points.gained = (sum / (prestigeSum * num)) || 0;
+    points.gained = (sum / prestigeSum / 5) || 0;  // Teilen durch 5, da 5 der Maximalwert für eine Einzelwertung ist
 
     // ausgegebene Punkte zusammenzählen
-    sum = 0; num = 0;
-    for(i = 0; i < costs.length; i++) {
+    sum = 0;
+    num = 0;
+    for (i = 0; i < costs.length; i++) {
       // hier können wir alle Relationen nehmen, da Punkte immer nur linear abgezogen werden
       // entgegen der :GIVES_POINTS Relationen müssen wir diese auch jetzt schon beachten, da man sonst immer genug Punkte für alles hätte
-      if(costs[i].properties.points) {
+      if (costs[i].properties.points) {
         num++;
         sum += costs[i].properties.points;
       }
@@ -620,14 +714,14 @@ User.prototype.getPoints = function(callback) {
  * @function Helferfunktion die überprüft ob der User noch {points} Punkte hat
  * @param {integer} amount Anzahl der Punkte die der User mindestens haben soll
  */
-User.prototype.hasPoints = function(amount, cb) {
+User.prototype.hasPoints = function (amount, cb) {
 
-  if(amount === 0 || this.isAdmin()) return cb(null, true);
+  if (amount === 0 || this.isAdmin()) return cb(null, true);
 
-  this.getPoints(function(err, points) {
-    if(err) return cb(err);
+  this.getPoints(function (err, points) {
+    if (err) return cb(err);
     var total = points.gained - points.spent;
-    if(total < amount) {
+    if (total < amount) {
       return cb(null, false);
     } else {
       return cb(null, true);
@@ -641,7 +735,7 @@ User.prototype.hasPoints = function(amount, cb) {
  * @param {string} nodeUUID UUID der zu überprüfenden Node
  * @returns true/false
  */
-User.prototype.hasCreated = function(nodeUUID, callback) {
+User.prototype.hasCreated = function (nodeUUID, callback) {
 
   var self = this;
 
@@ -658,8 +752,8 @@ User.prototype.hasCreated = function(nodeUUID, callback) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return callback(err);
+  }, function (err, result) {
+    if (err) return callback(err);
     return callback(null, result.length === 0 ? false : true);
   });
 
@@ -668,7 +762,7 @@ User.prototype.hasCreated = function(nodeUUID, callback) {
 /**
  * @function Überprüft ob ein User eine Lösung für {taskUUID} eingestellt hat oder nicht
  */
-User.prototype.hasSolved = function(taskUUID, cb) {
+User.prototype.hasSolved = function (taskUUID, cb) {
 
   var self = this;
 
@@ -685,8 +779,8 @@ User.prototype.hasSolved = function(taskUUID, cb) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return cb(err);
+  }, function (err, result) {
+    if (err) return cb(err);
     return cb(null, result.length === 0 ? false : true);
   });
 
@@ -695,7 +789,7 @@ User.prototype.hasSolved = function(taskUUID, cb) {
 /**
  * @function Aktualisiert das Attribut `lastLogin` des Nutzers
  */
-User.prototype.updateLoginTimestamp = function(cb) {
+User.prototype.updateLoginTimestamp = function (cb) {
 
   var self = this;
 
@@ -712,8 +806,8 @@ User.prototype.updateLoginTimestamp = function(cb) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return cb(err);
+  }, function (err, result) {
+    if (err) return cb(err);
     return cb(null, true);
   });
 
@@ -723,7 +817,7 @@ User.prototype.updateLoginTimestamp = function(cb) {
  * @function Liefert das aktuelle Arbeitspaket des Nutzers
  * @returns Das aktuelle Package als Package-Objekt, falls noch keins existiert null
  */
-User.prototype.getPackage = function(cb) {
+User.prototype.getPackage = function (cb) {
 
   var self = this;
 
@@ -740,8 +834,8 @@ User.prototype.getPackage = function(cb) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return cb(err);
+  }, function (err, result) {
+    if (err) return cb(err);
     cb(null, new Package(result[0].p));
   });
 
@@ -750,7 +844,7 @@ User.prototype.getPackage = function(cb) {
 /**
  * @function Liefert den aktuellen Prestige Wert des Nutzers
  */
-User.prototype.getPrestige = function(cb) {
+User.prototype.getPrestige = function (cb) {
 
   var self = this;
 
@@ -766,15 +860,21 @@ User.prototype.getPrestige = function(cb) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return cb(err);
-    var i = 1, prestigePoints = 2.5; // default wert
+  }, function (err, result) {
+    if (err) return cb(err);
+    var i = 1,
+      prestigePoints = 2.5; // default wert
     // alle GIVES_PRESTIGE Relationships aufaddieren und den Durchschnitt bilden
     // der Prestigewert der Bewerter wird hierfür nicht benötigt, befindet sich aber auch in der Relation
-    result.forEach(function(r) {
+    result.forEach(function (r) {
       i++;
       prestigePoints += r.r.properties.points;
     });
+    // falls es schon GIVES_PRESTIGE Relationen gibt, wird der Defaultwert gestrichen
+    if (i > 1) {
+      i--;
+      prestigePoints -= 2.5;
+    }
     // jetzt noch Durschnitt bilden
     var prestige = prestigePoints / i;
     return cb(null, prestige);
@@ -786,7 +886,7 @@ User.prototype.getPrestige = function(cb) {
  * @function Liefert die Bewertung des Users für eine Node {nodeUUID} zurück
  * @param {string} nodeUUID UUID der Node für die die Bewertung des Nutzers gesucht werden soll
  */
-User.prototype.getMyRatingFor = function(nodeUUID, cb) {
+User.prototype.getMyRatingFor = function (nodeUUID, cb) {
 
   var self = this;
 
@@ -803,9 +903,9 @@ User.prototype.getMyRatingFor = function(nodeUUID, cb) {
   db.cypher({
     query: query,
     params: params
-  }, function(err, result) {
-    if(err) return cb(err);
-    if(result.length === 0) {
+  }, function (err, result) {
+    if (err) return cb(err);
+    if (result.length === 0) {
       err = new Error('Du hast noch keine Bewertung für diesen Inhalt');
       err.status = 404;
       err.name = 'RatingNotFound';
@@ -823,7 +923,7 @@ User.prototype.getMyRatingFor = function(nodeUUID, cb) {
  */
 User.prototype.addMetadata = function (apiVersion) {
 
-  if(this.properties.password) {
+  if (this.properties.password) {
     delete this.properties.password;
   }
 

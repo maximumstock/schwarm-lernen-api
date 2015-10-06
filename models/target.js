@@ -535,7 +535,7 @@ Target.prototype.getConfig = function(cb) {
       // das Lernziel hat keine eigene Config -> Config von nächsthöheren Lernziel holen
       self.getParent(function(err, nextParent) {
         if(err) return cb(err);
-        console.log(nextParent);
+        console.log(nextParent, 2);
         nextParent.getConfig(cb);
       });
     } else {

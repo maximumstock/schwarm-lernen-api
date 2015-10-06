@@ -22,11 +22,20 @@ var API_VERSION = config.HOST_URL + '/api/v1';
 router.get('/self', function(req, res, next) {
   res.json({
     tasks: {
-      created: API_VERSION + '/self/tasks/created',
+      created: {
+        all: API_VERSION + '/self/tasks/created',
+        unfinished: API_VERSION + '/self/tasks/created/unfinished'
+      },
       solved: API_VERSION + '/self/tasks/solved'
     },
-    solutions: API_VERSION + '/self/solutions',
-    infos: API_VERSION + '/self/infos',
+    solutions: {
+      all: API_VERSION + '/self/solutions',
+      unfinished: API_VERSION + '/self/solutions/unfinished'
+    },
+    infos: {
+      all: API_VERSION + '/self/infos',
+      unfinished: API_VERSION + '/self/infos/unfinished'
+    },
     points: API_VERSION + '/self/points',
     prestige: API_VERSION + '/self/prestige',
     workpackage: API_VERSION + '/self/workpackage'
@@ -38,6 +47,20 @@ router.get('/self/tasks/created', function(req, res, next) {
 
   var user = req.user;
   user.getOwnTasks(function(err, tasks) {
+    if(err) return next(err);
+    tasks.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    res.json(tasks);
+  });
+
+});
+
+// Alle selbst erstellten Aufgaben des aktuellen Users, die noch nicht abgegeben wurden
+router.get('/self/tasks/created/unfinished', function(req, res, next) {
+
+  var user = req.user;
+  user.getOwnUnfinishedTasks(function(err, tasks) {
     if(err) return next(err);
     tasks.forEach(function(i) {
       i.addMetadata(API_VERSION);
@@ -61,6 +84,34 @@ router.get('/self/tasks/solved', function(req, res, next) {
 
 });
 
+// Alle selbst erstellten Lösungen des aktuellen Users
+router.get('/self/solutions', function(req, res, next) {
+
+  var user = req.user;
+  user.getSolutions(function(err, solutions) {
+    if(err) return next(err);
+    solutions.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    res.json(solutions);
+  });
+
+});
+
+// Alle selbst erstellten Lösungen des aktuellen Users, die noch nicht abgegeben wurden
+router.get('/self/solutions/unfinished', function(req, res, next) {
+
+  var user = req.user;
+  user.getUnfinishedSolutions(function(err, solutions) {
+    if(err) return next(err);
+    solutions.forEach(function(i) {
+      i.addMetadata(API_VERSION);
+    });
+    res.json(solutions);
+  });
+
+});
+
 // Alle selbst erstellten Infos des aktuellen Users
 router.get('/self/infos', function(req, res, next) {
 
@@ -75,16 +126,16 @@ router.get('/self/infos', function(req, res, next) {
 
 });
 
-// Alle selbst erstellten Lösungen des aktuellen Users
-router.get('/self/solutions', function(req, res, next) {
+// Alle selbst erstellten Infos des aktuellen Users, die noch nicht abgegeben wurden
+router.get('/self/infos/unfinished', function(req, res, next) {
 
   var user = req.user;
-  user.getSolutions(function(err, solutions) {
+  user.getUnfinishedInfos(function(err, infos) {
     if(err) return next(err);
-    solutions.forEach(function(i) {
+    infos.forEach(function(i) {
       i.addMetadata(API_VERSION);
     });
-    res.json(solutions);
+    res.json(infos);
   });
 
 });

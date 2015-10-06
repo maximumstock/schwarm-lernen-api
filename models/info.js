@@ -36,7 +36,9 @@ Info.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Info-Nodes für Info#create
 Info.VALIDATION_RULES = {
-  description: 'required|string|max:2000'
+  description: 'required|string|max:200',
+  sources: 'required|string|max:1000',
+  text: 'required|string|max:2000'
 };
 
 Info.PROTECTED_ATTRIBUTES = ['uuid', 'createdAt', 'author', 'target'];

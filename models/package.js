@@ -181,7 +181,7 @@ Package.prototype.updatePackage = function(job, config, cb) {
 
   var query = [
     'MATCH (p:Package {uuid: {packageUUID}})',
-    'SET p.tasksToDo = {tasksToDo}, p.infosToDo = {infosToDo}, p.ratingsToDo = {ratingsToDo}, p.solutionsToDo = {solutionsToDo}',
+    'SET p = {properties}',
     'RETURN p'
   ].join('\n');
 
@@ -214,7 +214,9 @@ Package.prototype.updatePackage = function(job, config, cb) {
 
   db.cypher({
     query: query,
-    params: params
+    params: {
+      properties: params
+    }
   }, function(err, result) {
     if(err) return cb(err);
     if(result.length === 0) {

@@ -91,12 +91,6 @@ router.get('/targets/:targetUUID/parent', helper.prefetchTarget, auth.restricted
 // Fügt eine neue Info hinzu
 router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted, helper.prefetchConfig, helper.prefetchPackage, function(req, res, next) {
 
-  req.checkBody('description', 'Inhalt der neuen Info fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
-
   var target = req._target;
   var config = req._config;
   var user = req.user;
@@ -116,7 +110,7 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
       // Punkte vom Ersteller der Info abziehen
       async.parallel([
         function(_cb) {pack.updatePackage({infos: 1}, config, _cb);},
-        function(_cb) {info.givePointsTo(user.uuid, {points: config.infoPoints}, _cb);},
+        //function(_cb) {info.givePointsTo(user.uuid, {points: config.infoPoints}, _cb);},
         function(_cb) {info.takePointsFrom(user.uuid, {points: config.infoCost}, _cb);}
       ], function(errors, results) {
         if(errors) return next(errors);
@@ -160,12 +154,6 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
 // Fügt eine neue Aufgabe hinzu
 router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted, helper.prefetchConfig, helper.prefetchPackage, function(req, res, next) {
 
-  req.checkBody('description', 'Inhalt der neuen Aufgabe fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
-
   var target = req._target;
   var config = req._config;
   var user = req.user;
@@ -186,8 +174,8 @@ router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted
       // Punkte an den User verteilen, der die Aufgabe eingestellt hat
       // Punkte vom User als Gebühr abzwicken, der die Aufgabe eingestellt hat
       async.parallel([
-        function(_cb) {pack.updatePackage({solutions: 1}, config, _cb);},
-        function(_cb) {task.givePointsTo(user.uuid, {points: config.taskPoints}, _cb);},
+        function(_cb) {pack.updatePackage({tasks: 1}, config, _cb);},
+        //function(_cb) {task.givePointsTo(user.uuid, {points: config.taskPoints}, _cb);},
         function(_cb) {task.takePointsFrom(user.uuid, {points: config.taskCost}, _cb);}
       ], function(errors, results) {
         if(errors) return next(errors);
