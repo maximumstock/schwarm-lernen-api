@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * @file Enthält das Datenmodell und die Businessregeln für Konfigurationen für Studiengänge.
+ * @file Enthält das Datenmodell und die Businessregeln für Konfigurationen für Lernziele.
  */
 
  /**
@@ -32,16 +32,13 @@ Config.prototype = Object.create(Node.prototype);
 
 // Enthält Informationen zum Validieren von Attributen neuer Konfigurationen für Config#create, Config#patch
 Config.VALIDATION_RULES = {
-  packageSize: 'integer|above:5',
-  rateMultiplier: 'integer|min:1',
-  taskShare: 'number|range:0,100',
-  infoShare: 'number|range:0,100',
-  rateShare: 'number|range:0,100',
-  solutionShare: 'number|range:0,100',
   taskPoints: 'integer|min:0',
   infoPoints: 'integer|min:0',
   ratePoints: 'integer|min:0',
   solutionPoints: 'integer|min:0',
+  taskMaxPoints: 'integer|min:1',
+  infoMaxPoints: 'integer|min:1',
+  solutionMaxPoints: 'integer|min:1',
   taskCost: 'integer|min:0',
   infoCost: 'integer|min:0',
   rateCost: 'integer|min:0',
@@ -53,44 +50,21 @@ Config.PROTECTED_ATTRIBUTES = ['createdAt', 'parent', 'uuid'];
 
 // Default-Konfigurationsobjekt für das Erstellen neuer Studiengänge
 Config.DEFAULT_CONFIG = {
-  packageSize: 10,
-  // Shares beziehen sich auf die Anteile an neu verteilten Arbeitspaketen
-  rateShare: 0.15,
-  taskShare: 0.50,
-  infoShare: 0.35,
-  solutionShare: 0.0,
-  // Points beziehen sich auf die Menge der Punkte die der Einstellende für eine Aktion bekommt
+  // folgende 3 Werte beziehen sich auf die Menge der Punkte die der Betreffende maximal erhalten kann wenn alle Bewertungen die maximale Punktzahl geben
+  taskMaxPoints: 10,
+  infoMaxPoints: 10,
+  solutionMaxPoints: 1,
+  // folgende 3 Werte beziehen sich auf die Menge der Punkte die der Einstellende direkt nach dem Einstellen des jeweiligen Inhalts bekommt
   infoPoints: 5,
   taskPoints: 7,
   solutionPoints: 0,
-  ratePoints: 1,
+  ratePoints: 1, // ratePoints hingegen bezieht sich auf die Menge der Punkte die man für das Bewerten von Bewertungen erhalten soll
   // Costs beziehen sich auf die Menge der Punkte die der Einstellende für eine Aktion zahlen muss
   infoCost: 0,
   taskCost: 0,
   solutionCost: 10, // eig Kosten
-  rateCost: 1, // Anzahl der Punkte die der Bewertende für eine Bewertung bekommt
-  rateMultiplier: 1, // ein Multiplikator der mit der Bewertung (1-5) verrechnet und als Punkten der A/L/I hinzugefügt wird,
-
+  rateCost: 1 // Anzahl der Punkte die der Bewertende für eine Bewertung bekommt
 };
-
-// Propertydefinition für den Namen des Studiengangs
-Object.defineProperty(Config.prototype, 'degree', {
-  get: function () {
-    return this.properties.degree;
-  }
-});
-
-Object.defineProperty(Config.prototype, 'packageSize', {
-  get: function () {
-    return this.properties.packageSize;
-  }
-});
-
-Object.defineProperty(Config.prototype, 'rateMultiplier', {
-  get: function () {
-    return this.properties.rateMultiplier;
-  }
-});
 
 Object.defineProperty(Config.prototype, 'ratePoints', {
   get: function () {
@@ -101,18 +75,6 @@ Object.defineProperty(Config.prototype, 'ratePoints', {
 Object.defineProperty(Config.prototype, 'rateCost', {
   get: function () {
     return this.properties.rateCost;
-  }
-});
-
-Object.defineProperty(Config.prototype, 'rateShare', {
-  get: function () {
-    return this.properties.rateShare;
-  }
-});
-
-Object.defineProperty(Config.prototype, 'solutionShare', {
-  get: function () {
-    return this.properties.solutionShare;
   }
 });
 
@@ -128,9 +90,9 @@ Object.defineProperty(Config.prototype, 'solutionPoints', {
   }
 });
 
-Object.defineProperty(Config.prototype, 'infoShare', {
+Object.defineProperty(Config.prototype, 'solutionMaxPoints', {
   get: function () {
-    return this.properties.infoShare;
+    return this.properties.solutionMaxPoints;
   }
 });
 
@@ -146,9 +108,9 @@ Object.defineProperty(Config.prototype, 'infoPoints', {
   }
 });
 
-Object.defineProperty(Config.prototype, 'taskShare', {
+Object.defineProperty(Config.prototype, 'infoMaxPoints', {
   get: function () {
-    return this.properties.taskShare;
+    return this.properties.infoMaxPoints;
   }
 });
 
@@ -161,6 +123,12 @@ Object.defineProperty(Config.prototype, 'taskCost', {
 Object.defineProperty(Config.prototype, 'taskPoints', {
   get: function () {
     return this.properties.taskPoints;
+  }
+});
+
+Object.defineProperty(Config.prototype, 'taskMaxPoints', {
+  get: function () {
+    return this.properties.taskMaxPoints;
   }
 });
 
@@ -223,13 +191,6 @@ Config.create = function (properties, parentUUID, callback) {
       properties.createdAt = moment().format('X');
       properties.parent = parentUUID;
 
-      // shares normalisieren
-      var sum = properties.solutionShare + properties.infoShare + properties.taskShare + properties.rateShare;
-      properties.solutionShare = properties.solutionShare / sum;
-      properties.infoShare = properties.infoShare / sum;
-      properties.taskShare = properties.taskShare / sum;
-      properties.rateShare = properties.rateShare / sum;
-
       var query = [
         'MATCH (t:Target {uuid: {parentUUID}})',
         'CREATE (t)<-[:BELONGS_TO]-(c:Config {properties})',
@@ -285,19 +246,6 @@ Config.prototype.patch = function (properties, callback) {
     if(properties.hasOwnProperty(i)) delete properties[i];
   });
 
-  // vor normalisierung alle Werte zuweisen
-  properties.solutionShare = properties.solutionShare || 100*this.properties.solutionShare;
-  properties.taskShare = properties.taskShare || 100*this.properties.taskShare;
-  properties.infoShare = properties.infoShare || 100*this.properties.infoShare;
-  properties.rateShare = properties.rateShare || 100*this.properties.rateShare;
-
-  // shares normalisieren
-  var sum = properties.solutionShare + properties.infoShare + properties.taskShare + properties.rateShare;
-  properties.solutionShare = properties.solutionShare / sum;
-  properties.infoShare = properties.infoShare / sum;
-  properties.taskShare = properties.taskShare / sum;
-  properties.rateShare = properties.rateShare / sum;
-
   properties.changedAt = moment().format('X');
 
   var query = [
@@ -320,6 +268,31 @@ Config.prototype.patch = function (properties, callback) {
     var c = new Config(result[0].c);
     callback(null, c);
 
+  });
+
+};
+
+/**
+ * @function Löscht die jeweilige Konfiguration
+ */
+Config.prototype.del = function(cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (c:Config {uuid: {configUUID}})-[r:BELONGS_TO]->(t:Target)',
+    'DELETE c,r'
+  ].join('\n');
+
+  var params = {
+    configUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    return cb(err, null);
   });
 
 };

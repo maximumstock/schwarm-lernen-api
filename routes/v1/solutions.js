@@ -32,7 +32,7 @@ router.get('/solutions/:solutionUUID', helper.prefetchSolution, auth.restricted,
 });
 
 // Gibt Bewertung der Lösung zurück
-router.get('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.restricted, function(req, res, next) {
+router.get('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.restricted, helper.alreadyRatedRestricted, function(req, res, next) {
 
   var solution = req._solution;
   var user = req.user;
@@ -101,7 +101,7 @@ router.post('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.re
         function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
         function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
         function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
-        function(_cb) { rating.givePointsTo(solution.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.solutionPoints}, _cb); }
+        function(_cb) { rating.givePointsTo(solution.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.solutionMaxPoints}, _cb); }
       ], function(errors, results) {
         if(errors) next(errors);
         return res.status(201).json({success: true});

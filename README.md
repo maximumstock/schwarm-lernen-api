@@ -6,9 +6,6 @@ Dies ist eine REST-like API für das Projekt Schwarmlernen an der Hochschule Cob
 - [node-neo4j](https://github.com/thingdom/node-neo4j) Neo4J-Treiber für node.js
 - Neo4J-Plugin zum automatischen Generieren von UUIDs für Nodes: [https://github.com/graphaware/neo4j-uuid](https://github.com/graphaware/neo4j-uuid)
 
-### Datenmodell
-Lorem ipsum dolor amet
-
 ### Authentifizierung
 Alle Endpunkte können nur von authentifizierten Nutzern angesprochen werden. Hierbei wird zwischen `Usern` und `Admins` unterschieden.
 
@@ -40,8 +37,8 @@ Alle Aufgaben, Infos und Lösungen haben einen Aktivitätsstatus, der als Proper
 nicht zur Erfüllung von Arbeitspaketen oder dem Gesamtkontostand eines Nutzers dazugezählt.
 
 ### Punktekonzept
-Jeder Benutzer sammelt <s>beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch</s> für das Bewerten von fremden Inhalten Punkte. Mit diesen Punkten
-Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <s>für die einzelnen Aktionen </s>verdient und bezahlt werden.
+Jeder Benutzer sammelt beim Einstellen eigener Inhalte, wie Aufgaben, Lösungen und Infos, aber auch für das Bewerten von fremden Inhalten Punkte. Darüber hinaus können Punkte erspielt werden, indem andere Nutzer die eigenen Inhalte bewerten. Anhand des Rufes/Prestigewertes des Bewertenden erhält der, der den bewerteten Inhalt erstellt hat, zusätzliche Punkte. Der Ruf eines Spielers richtet sich widerum nach der durchschnittlichen Bewertung anderer Nutzer, welche seine selbst erstellten Bewertungen bewerten.
+Die Konfiguration des jeweiligen Hauptlernziels bestimmt wie viele Punkte für die einzelnen Aktionen verdient und bezahlt werden.
 
 
 ---
@@ -50,7 +47,8 @@ Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <
 * `GET /targets/:targetUUID` - AccessRestricted - Ein bestimmtes Lernziel mit der ID `:targetUUID`
 * `GET /targets/:targetUUID/parent` - AccessRestricted - Die Vaternode des Lernziels
 * `GET /targets/:targetUUID/children` - AccessRestricted - Liefert alle Kind-Nodes des Lernziels `:targetUUID` sortiert nach **Tasks**, **Infos** (welche bereits per `/submit` abgegeben wurden) und **Targets**
-* **NEW** `GET /targets/:targetUUID/config` - AccessRestricted - Liefert die Konfiguration des Lernziels bzw. die globale Konfiguration falls `:targetUUID` keine eigene Konfiguration hat
+* **NEW** `GET /targets/:targetUUID/config` - AccessRestricted - Liefert die Konfiguration des Lernziels
+* **NEW** `GET /targets/:targetUUID/globalconfig` - AccessRestricted - Liefert die globale Konfiguration des Lernzielbaums zu dem `:targetUUID` gehört
 * `GET /targets/:targetUUID/users` - AccessRestricted - Liefert Liste alle Nutzer die auf dieses Lernziel Zugriff haben. Falls `:targetUUID` kein Hauptlernziel/EntryTarget ist, wird momentan ein leeres Array zurückgeliefert, da die Zugriffssteuerung über das verantwortliche Hauptlernziel läuft
 * **NEW** `POST /targets` - AdminOnly - Erstellt ein neues Hauptlernziel
 	* name - String - Name des neuen Lernziels - Max. Länge 50 Zeichen
@@ -68,23 +66,34 @@ Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <
 * **NEW** `PUT /targets/:targetUUID/users` - AdminOnly - Generiert neue Accounts die Zugriff auf `:targetUUID` erhalten
 	* amount - Integer - Anzahl an zu generierenden Usern - Max. 50 gleichzeitig
 * **NEW** `PUT /targets/:targetUUID/config` - AdminOnly - Aktualisiert die Konfiguration von `:targetUUID` (Parameter siehe [Standardkonfiguration](#defaultconfig))
+* **NEW** `PUT /targets/:targetUUID/global` - AdminOnly - Aktualisiert die globale Konfiguration des Lernzielbaums zu dem `:targetUUID` gehört
 * `DELETE /targets/:targetUUID` - AdminOnly - Löscht das Lernziel mit der ID `:targetUUID`
+* `DELETE /targets/:targetUUID/config` - AdminOnly - Löscht die Config des Lernziels `:targetUUID`, aber ausschließlich dann, wenn es sich bei `:targetUUID` nicht um ein Hauptlernziel handelt
 
+* Hinweise zu Konfigurationen:
+	* jedes Hauptlernziel erhält bei der Erstellung eine globale Konfiguration (Parameter siehe [Standardkonfiguration](#defaultconfig))
+	* jedes Lernziel (auch das Hauptlernziel) kann eine eigene, spezialisierte Konfiguration besitzen
+	* unter `/targets/:targetUUID/config` erhält man die globale Konfiguration überschrieben mit den Werten aus der spezialisierten Konfiguration von `:targetUUID`
+	* die Parameter `packageSize`, `taskShare`, `infoShare`, `solutionShare` und `rateShare` werden nicht von der spezialisierten Konfiguration überschrieben
+	* als `[G]` markierte Konfigurationsparameter können nicht durch spezialisierte Konfigurationen überschrieben werden
+	
 * <a name="defaultconfig">Standardkonfiguration</a>:
-	* packageSize - Integer - Gesamtgröße für neue Arbeitspakete - Default: 10
-	* solutionShare - Integer - Prozentwert die Lösungen in einem Arbeitspaket ausmachen sollen - Default: 0%
-	* infoShare - Integer - Prozentwert die Infos in einem Arbeitspaket ausmachen sollen - Default: 35%
-	* taskShare - Integer - Prozentwert die Aufgaben in einem Arbeitspaket ausmachen sollen - Default: 50%
-	* rateShare - Integer - Prozentwert die Bewertungen in einem Arbeitspaket ausmachen sollen - Default: 15%
-	* solutionPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Lösung erhalten soll - Default: 0
-	* infoPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Info erhalten soll - Default: 5
-	* taskPoints - Integer - Anzahl der Punkte die jemand für das Einstellen einer Aufgabe erhalten soll - Default: 7
-	* ratePoints - Integer - Anzahl der Punkte die jemand für das Bewerten von fremden Inhalten erhalten soll - Default: 1
+	* [G] - packageSize - Integer, min. 5 - Gesamtgröße für neue Arbeitspakete - Default: 10
+	* [G] - solutionShare - Integer - Prozentwert die Lösungen in einem Arbeitspaket ausmachen sollen - Default: 0%
+	* [G] - infoShare - Integer - Prozentwert die Infos in einem Arbeitspaket ausmachen sollen - Default: 20%
+	* [G] - taskShare - Integer - Prozentwert die Aufgaben in einem Arbeitspaket ausmachen sollen - Default: 50%
+	* [G] - rateShare - Integer - Prozentwert die Bewertungen in einem Arbeitspaket ausmachen sollen - Default: 30%
+	* solutionPoints - Integer - Anzahl der Punkte die ein Nutzer für das Einstellen von Lösungen erhalten soll - Default: 0
+	* infoPoints - Integer - Anzahl der Punkte die ein Nutzer für das Einstellen von Infos erhalten soll - Default: 5
+	* taskPoints - Integer - Anzahl der Punkte die ein Nutzer für das Einstellen von Aufgaben erhalten soll - Default: 7
+	* solutionMaxPoints - Integer - maximale Anzahl der Punkte die ein Nutzer durch Bewertungen von seinen Lösungen erhalten soll - Default: 0
+	* infoMaxPoints - Integer - maximale Anzahl der Punkte die ein Nutzer durch Bewertungen von seinen Infos erhalten soll - Default: 10
+	* taskMaxPoints - Integer - maximale Anzahl der Punkte die ein Nutzer durch Bewertungen von seinen Aufgaben erhalten soll - Default: 10
+	* ratePoints - Integer - Anzahl der Punkte die ein Nutzer für das Bewerten von Bewertungen erhalten soll - Default: 1
 	* solutionCost - Integer - Anzahl der Punkte die das Einstellen einer Lösung kosten soll - Default: 10
 	* infoCost - Integer - Anzahl der Punkte die das Einstellen einer Info kosten soll - Default: 0
 	* taskCost - Integer - Anzahl der Punkte die das Einstellen einer Aufgabe kosten soll - Default: 0
 	* rateCost - Integer - Anzahl der Punkte die das Bewerten von Inhalten kosten soll - Default: 0
-	* *IGNORE* rateMultiplier - Integer - Multiplikator mit dem die durchschnittliche Bewertung von Inhalten verrechnet wird. Das Produkt wird auf die Gesamtpunktzahl der A/L/I addiert. - Default: 1
 
 ---
 ### Aufgaben/Tasks
@@ -135,14 +144,36 @@ Die Konfiguration des jeweiligen Studiengangs/Moduls bestimmt wie viele Punkte <
 * **NEW** `PUT /infos/:infoUUID/submit` - AuthorOnly - Gibt die Info ab, macht sie unveränderbar
 
 ---
+### Ratings
+* `GET /ratings/:ratingUUID` - AccessRestricted - Liefert das Rating `:ratingUUID`
+* `GET /ratings/:ratinguUUID/rating` - AccessRestricted - Liefert das eigene Rating für das Rating `:ratingUUID`
+* `GET /ratings/:ratingUUID/ratings` - AuthorOnly - Liefert alle Ratings für das Rating `:ratingUUID`
+* `POST /ratings/:ratingUUID/ratings` - AccessRestricted - Neue Bewertung zum Rating `:ratingUUID` abgeben
+	* values - Array - Array aus Integern, die die Einzelbewertungen für verschiedene Kriterien darstellen
+	* names - Array - Array aus Strings mit den Bezeichnungen der einzelnen Kriterien
+	* comment - String - Zusatzkommentar zur Bewertung - Max. Länge 1000 Zeichen
+
+---
 ### Nutzerprofile
 * `GET /self` - Kleines Inhaltsverzeichnis für die weitere Struktur
 * `GET /self/solutions` - Liefert alle Lösungen des aktuellen Users
+* `GET /self/solutions/unfinished` - Liefert alle erstellten aber nicht abgegebenen Lösungen des Users
+* `GET /self/solutions/finished` - Liefert alle erstellten und abgegebenen Lösungen des Users
+* `GET /self/solutions/inactive` - Liefert alle deaktivierten Lösungen des Nutzers
+
 * `GET /self/tasks/created` - Liefert alle selbst erstellten Aufgaben des Users
-* `GET /self/tasks/sovled` - Liefert alle vom aktuellen User gelösten Aufgaben
+* `GET /self/tasks/created/unfinished` - Liefert alle selbst erstellten aber nicht abgegebenen Aufgaben des Users
+* `GET /self/tasks/created/finished` - Liefert alle selbst erstellten und abgegebenen Aufgaben des Users
+* `GET /self/tasks/created/inactive` - Liefert alle selbst erstellten und deaktivierten Aufgaben des Users
+* `GET /self/tasks/solved` - Liefert alle vom aktuellen User gelösten Aufgaben
+
 * `GET /self/infos` - Liefert alle Infos des aktuellen Users
+* `GET /self/infos/unfinished` - Liefert alle erstellten aber nicht abgegebenen Infos des Users
+* `GET /self/infos/finished` - Liefert alle erstellten und abgegebenen Infos des Users
+* `GET /self/infos/inactive` - Liefert alle erstellten und deaktivierten Infos des Users
+
 * `GET /self/points` - Liefert Punktekonto des aktuellen Users
-* **NEW** `GET /self/prestige` - Liefert den aktuellen Prestige-/Rufwert des Nutzers
+* `GET /self/prestige` - Liefert den aktuellen Prestige-/Rufwert des Nutzers
 * `GET /self/workpackage` - Liefert die aktuelle Arbeitspaketsituation des Nutzers
 
 ---

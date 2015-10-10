@@ -32,7 +32,7 @@ router.get('/infos/:infoUUID', helper.prefetchInfo, auth.restricted, function(re
 });
 
 // Gibt Bewertung der Info zurück
-router.get('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.restricted, function(req, res, next) {
+router.get('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.restricted, helper.alreadyRatedRestricted, function(req, res, next) {
 
   var info = req._info;
   var user = req.user;
@@ -101,7 +101,7 @@ router.post('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.restricted, he
         function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
         function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
         function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
-        function(_cb) { rating.givePointsTo(info.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.infoPoints}, _cb); }
+        function(_cb) { rating.givePointsTo(info.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.infoMaxPoints}, _cb); }
       ], function(errors, results) {
         if(errors) next(errors);
         return res.status(201).json({success: true});

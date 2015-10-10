@@ -10,6 +10,7 @@ var config = require('../../config/config');
 var helper = require('./helper/middleware');
 var auth = require('./auth/auth');
 var async = require('async');
+var moment = require('moment');
 
 var Target = require('../../models/target');
 var Info = require('../../models/info');
@@ -17,6 +18,7 @@ var Task = require('../../models/task');
 var Config = require('../../models/config');
 var User = require('../../models/user');
 var Package = require('../../models/package');
+var GlobalConfig = require('../../models/globalconfig');
 
 var API_VERSION = config.HOST_URL + '/api/v1';
 
@@ -49,6 +51,18 @@ router.get('/targets/:targetUUID/config', helper.prefetchTarget, helper.prefetch
 
   var config = req._config;
   res.json(config);
+
+});
+
+// Gibt globale Konfiguration des Lernziels zurück
+router.get('/targets/:targetUUID/globalconfig', helper.prefetchTarget, auth.restricted, function(req, res, next) {
+
+  var target = req._target;
+
+  target.getGlobalConfig(function(err, globalconfig) {
+    if(err) return next(err);
+    res.json(globalconfig);
+  });
 
 });
 
@@ -110,7 +124,7 @@ router.post('/targets/:targetUUID/infos', helper.prefetchTarget, auth.restricted
       // Punkte vom Ersteller der Info abziehen
       async.parallel([
         function(_cb) {pack.updatePackage({infos: 1}, config, _cb);},
-        //function(_cb) {info.givePointsTo(user.uuid, {points: config.infoPoints}, _cb);},
+        function(_cb) {info.givePointsTo(user.uuid, {points: config.infoPoints}, _cb);},
         function(_cb) {info.takePointsFrom(user.uuid, {points: config.infoCost}, _cb);}
       ], function(errors, results) {
         if(errors) return next(errors);
@@ -175,7 +189,7 @@ router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted
       // Punkte vom User als Gebühr abzwicken, der die Aufgabe eingestellt hat
       async.parallel([
         function(_cb) {pack.updatePackage({tasks: 1}, config, _cb);},
-        //function(_cb) {task.givePointsTo(user.uuid, {points: config.taskPoints}, _cb);},
+        function(_cb) {task.givePointsTo(user.uuid, {points: config.taskPoints}, _cb);},
         function(_cb) {task.takePointsFrom(user.uuid, {points: config.taskCost}, _cb);}
       ], function(errors, results) {
         if(errors) return next(errors);
@@ -197,7 +211,7 @@ router.post('/targets/:targetUUID/tasks', helper.prefetchTarget, auth.restricted
       var err = new Error('Du musst erst dein Arbeitspaket abarbeiten bevor du wieder Aufgaben erstellen darfst');
       err.status = 409;
       err.name = 'WorkPackageNotDone';
-      res.json(err);
+      return next(err);
     }
 
     // überprüfe ob der Nutzer noch genug Punkte hat
@@ -235,13 +249,13 @@ router.get('/targets/:targetUUID/users', helper.prefetchTarget, auth.restricted,
 
 });
 
-// Lernziel erstellen
+// Hauptlernziel erstellen
 router.post('/targets', auth.adminOnly, function(req, res, next) {
 
   Target.create(req.body, null, function(err, target) {
     if (err) return next(err);
-    // create config
-    Config.create(Config.DEFAULT_CONFIG, target.uuid, function(actualError, config) {
+    // jedes Hauptlernziel muss eine globale Config besitzen
+    GlobalConfig.create(GlobalConfig.DEFAULT_CONFIG, target.uuid, function(actualError, config) {
       if(actualError) {
         // falls ein Fehler bei der Erstellung einer neuen Konfiguration ->
         return target.del(function(err, result) {
@@ -249,11 +263,21 @@ router.post('/targets', auth.adminOnly, function(req, res, next) {
           return next(actualError);
         });
       }
-      config.addMetadata(API_VERSION);
       target.addMetadata(API_VERSION);
-      target.properties.config = config;
       res.status(201).json(target);
     });
+  });
+
+});
+
+// Fügt ein neues Lernziel zu einem bestehenden Lernziel hinzu
+router.post('/targets/:targetUUID/targets', auth.adminOnly, helper.prefetchTarget, function(req, res, next) {
+
+  var target = req._target;
+  Target.create(req.body, target.uuid, function(err, info) {
+    if(err) return next(err);
+    info.addMetadata(API_VERSION);
+    res.json(info);
   });
 
 });
@@ -274,28 +298,91 @@ router.put('/targets/:targetUUID/config', auth.adminOnly, helper.prefetchTarget,
 
   var target = req._target;
 
-  // falls das Lernziel ein Hauptlernziel ist kann die Config geändert werden, andernfalls exisitiert keine
-  if(target.isEntryTarget()) {
-    target.getConfig(function(err, config) {
-      if(err) return next(err);
-      config.patch(req.body, function(err, nconfig) {
+  // je nachdem ob es sich bei `targetUUID` um ein Hauptlernziel oder ein gewöhnliches Lernziel handelt, muss erst eine Config erstellt werden
+  // durch folgendes Codegebilde müssen Lernziele nicht zwingend Konfigurationen besitzen sondern können nach und nach per PUT-Requests aktualisiert werden
+
+  // Hauptlernziele besitzen stets eine Konfiguration -> einfach updaten
+  // gewöhnliche Lernziel besitzen nach Erstellung noch keine und müssen - vor der Aktualisierung - erst noch erstellt werden
+  target.hasConfig(function(err, hasConfig) {
+    if(err) return next(err);
+    // falls das Lernziel bereits eine Konfiguration besitzt -> einfach updaten
+    if(hasConfig) {
+      target.getConfig(function(err, config) {
         if(err) return next(err);
-        res.json(nconfig);
+        config.patch(req.body, function(err, nconfig) {
+          if(err) return next(err);
+          res.json(nconfig);
+        });
       });
+    } else {
+      // falls noch keine Config besteht -> neue default Config erstellen und danach aktualisieren
+      Config.create(Config.DEFAULT_CONFIG, target.uuid, function(err, config) {
+        if(err) return next(err);
+        config.patch(req.body, function(err, nconfig) {
+          if(err) return next(err);
+          res.json(nconfig);
+        });
+      });
+    }
+  });
+
+});
+
+// globale Konfiguration aktualisieren
+// egal welches Lernziel für die URL gewählt wird, es wird immer die globale Konfiguration aktualisiert
+router.put('/targets/:targetUUID/globalconfig', auth.adminOnly, helper.prefetchTarget, function(req, res, next) {
+
+  var target = req._target;
+
+  target.getGlobalConfig(function(err, globalconfig) {
+    if(err) return next(err);
+    globalconfig.patch(req.body, function(err, nglobalconfig) {
+      if(err) return next(err);
+      res.json(nglobalconfig);
     });
-  } else {
-    var err = new Error('Dieses Lernziel ist kein Hauptlernziel. Ausschließlich Hauptlernziele können eine Konfiguration besitzen.');
+  });
+
+});
+
+// Config für Lernziel entfernen
+router.delete('/targets/:targetUUID/config', auth.adminOnly, helper.prefetchTarget, function(req, res, next) {
+
+  var target = req._target;
+
+  // falls das Lernziel ein Hauptlernziel ist, kann die Config nicht entfernt werden, da alle Hauptlernziele stets eine Config haben müssen
+  // damit ihre unterstehenden Lernziele auch stets eine haben
+  if(target.isEntryTarget()) {
+    var err = new Error('Konfigurationen von Hauptlernziele können nicht gelöscht werden');
     err.status = 409;
-    err.name = 'MissingEntryTargetStatus';
     return next(err);
   }
+
+  // die Konfigurationen von gewöhnlichen Lernziele können jedoch gelöscht werden
+  // aber nur wenn sie selber eine haben
+  target.hasConfig(function(err, hasConfig) {
+    if(err) return next(err);
+    if(!hasConfig) {
+      err = new Error('Dieses Lernziel hat keine eigene Konfiguration, welche gelöscht werden kann');
+      err.status = 404;
+      err.name = 'ConfigNotFound';
+      return next(err);
+    }
+    // Konfiguration holen und löschen
+    target.getConfig(function(err, config) {
+      if(err) return next(err);
+      config.del(function(err, result) {
+        if(err) return next(err);
+        res.json({success: true});
+      });
+    });
+  });
 
 });
 
 // User für Lernziel erstellen
 router.put('/targets/:targetUUID/users', auth.adminOnly, helper.prefetchTarget, helper.prefetchConfig, function(req, res, next) {
 
-  req.checkBody('amount', 'Menge an zu erstellenden Usern fehlt').notEmpty();
+  req.checkBody('amount', 'Menge an zu erstellenden Usern fehlt').notEmpty().isInt();
   var errors = req.validationErrors();
   if(errors) {
     return next(errors);
@@ -336,25 +423,6 @@ router.put('/targets/:targetUUID/users', auth.adminOnly, helper.prefetchTarget, 
 });
 
 
-
-// Fügt ein neues Lernziel hinzu
-router.post('/targets/:targetUUID/targets', auth.adminOnly, helper.prefetchTarget, function(req, res, next) {
-
-  req.checkBody('name', 'Name des neuen Lernziels fehlt').notEmpty();
-  var errors = req.validationErrors();
-  if(errors) {
-    return next(errors);
-  }
-
-  var target = req._target;
-  Target.create(req.body, target.uuid, function(err, info) {
-    if(err) return next(err);
-    info.addMetadata(API_VERSION);
-    res.json(info);
-  });
-
-});
-
 // Lernziel löschen
 router.delete('/targets/:targetUUID', auth.adminOnly, helper.prefetchTarget, function(req, res, next) {
 
@@ -370,7 +438,6 @@ router.delete('/targets/:targetUUID', auth.adminOnly, helper.prefetchTarget, fun
 router.put('/targets/:targetUUID', auth.adminOnly, helper.prefetchTarget, function(req, res, next) {
 
   var target = req._target;
-
   var newParentUUID = req.body.parent;
   var properties = req.body;
   delete properties.parent; // Attribut entfernen damit es nicht in den Node-Properties steht

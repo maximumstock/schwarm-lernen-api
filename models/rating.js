@@ -260,7 +260,48 @@ Rating.prototype.getRatings = function(callback) {
 };
 
 /**
- * @function Middleware um den Studiengang, zu dem diese Bewertung gehört, im Request zu speichern
+ * @function Helferfunktion um das Hauptlernziel, zu dem dieses Rating gehört, zu erhalten
+ */
+Rating.prototype.getParentEntryTarget = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (r:Rating {uuid: {uuid}})-[:RATES]->(n)',
+    'RETURN n'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return callback(err);
+    // da Ratings an verschiedenen Nodes hängen können (Aufgaben, Lösungen, Infos oder anderen Ratings),
+    // ist es am Besten die jeweilige getParentEntryTarget()-Funktion des jeweiligen Typs aufzurufen
+    var node = result[0].n;
+    var labels = node.labels;
+
+    if(labels.indexOf('Task') > -1) {
+       node = new Task(node);
+    } else if(labels.indexOf('Solution') > -1) {
+      node = new Solution(node);
+    } else if(labels.indexOf('Info') > -1) {
+      node = new Info(node);
+    } else {
+      node = new Rating(node);
+    }
+
+    node.getParentEntryTarget(callback);
+  });
+
+};
+
+/**
+ * @function Helferfunktion um das unmittelbar nächste Lernziel, zu dem dieses Rating gehört, zu erhalten
  */
 Rating.prototype.getParentTarget = function(callback) {
 

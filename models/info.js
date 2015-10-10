@@ -271,14 +271,39 @@ Info.prototype.getParent = function (callback) {
 };
 
 /**
- * @function Middleware um den Studiengang, zu dem diese Info gehört, im Request zu speichern
+ * @function Helferfunktion um das Hauptlernziel, zu dem diese Info gehört, zu erhalten
+ */
+Info.prototype.getParentEntryTarget = function(callback) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'RETURN et'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    callback(err, new Target(result[0].et));
+  });
+
+};
+
+/**
+ * @function Helferfunktion um das unmittelbar nächste Lernziel, zu dem diese Info gehört, zu erhalten
  */
 Info.prototype.getParentTarget = function(callback) {
 
   var self = this;
 
   var query = [
-    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(et:Target)',
     'RETURN et'
   ].join('\n');
 

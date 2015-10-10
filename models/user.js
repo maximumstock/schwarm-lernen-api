@@ -731,7 +731,7 @@ User.prototype.hasPoints = function (amount, cb) {
 };
 
 /**
- * @function Überprüft ob der User die Node {id} erstellt hat oder nicht
+ * @function Überprüft ob der User die Node {nodeUUID} erstellt hat oder nicht
  * @param {string} nodeUUID UUID der zu überprüfenden Node
  * @returns true/false
  */
@@ -755,6 +755,35 @@ User.prototype.hasCreated = function (nodeUUID, callback) {
   }, function (err, result) {
     if (err) return callback(err);
     return callback(null, result.length === 0 ? false : true);
+  });
+
+};
+
+/**
+ * @function Überprüft ob der User die Node {nodeUUID} bereits bewertet hat
+ * @param {string} nodeUUID UUID der zu überprüfenden Node
+ * @returns true/false
+ */
+User.prototype.hasRated = function(nodeUUID, cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (u:User {uuid: {userUUID}})-[:CREATED]->(r:Rating)-[:RATES]->(n {uuid: {nodeUUID}})',
+    'RETURN r'
+  ].join('\n');
+
+  var params = {
+    userUUID: self.uuid,
+    nodeUUID: nodeUUID
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    if(err) return cb(err);
+    return cb(null, result.length === 0 ? false : true);
   });
 
 };

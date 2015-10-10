@@ -34,7 +34,7 @@ router.get('/tasks/:taskUUID', helper.prefetchTask, auth.restricted, function(re
 });
 
 // Gibt Bewertung der Aufgabe zurück
-router.get('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, function(req, res, next) {
+router.get('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, helper.alreadyRatedRestricted, function(req, res, next) {
 
   var task = req._task;
   var user = req.user;
@@ -89,7 +89,7 @@ router.post('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, he
         function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
         function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
         function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
-        function(_cb) { rating.givePointsTo(task.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.taskPoints}, _cb); }
+        function(_cb) { rating.givePointsTo(task.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.taskMaxPoints}, _cb); }
       ], function(errors, results) {
         if(errors) next(errors);
         return res.status(201).json({success: true});
@@ -198,7 +198,7 @@ router.post('/tasks/:taskUUID/solutions', helper.prefetchTask, auth.restricted, 
       // Punkte vom User als Gebühr abzwicken, der die Lösung eingestellt hat
       async.parallel([
         function(_cb) {pack.updatePackage({solutions: 1}, config, _cb);},
-        //function(_cb) {solution.givePointsTo(user.uuid, config.solutionPoints, _cb);},
+        function(_cb) {solution.givePointsTo(user.uuid, config.solutionPoints, _cb);},
         function(_cb) {solution.takePointsFrom(user.uuid, config.solutionCost, _cb);}
       ], function(errors, results) {
         if(errors) return next(errors);

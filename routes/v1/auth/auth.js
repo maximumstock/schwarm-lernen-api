@@ -113,7 +113,7 @@ exports.restricted = function(req, res, next) {
   var user = req.user;
   var checker = req._checker;
 
-  checker.getParentTarget(function(err, target) {
+  checker.getParentEntryTarget(function(err, target) {
     if(err) return next(err);
     target.isAllowedUser(user.uuid, function(err, result) {
      if(err) return next(err);

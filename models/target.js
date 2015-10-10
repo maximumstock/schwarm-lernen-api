@@ -25,6 +25,7 @@ var Task = require('./task');
 var Info = require('./info');
 var Config = require('./config');
 var User = require('./user');
+var GlobalConfig = require('./globalconfig');
 
 var db = new neo4j.GraphDatabase({
   url: config.NEO4J_URL
@@ -230,7 +231,8 @@ Target.prototype.del = function(callback) {
   var query = [
     'MATCH (t:Target {uuid: {uuid}})',
     'OPTIONAL MATCH (t)-[r *1..]-(o)',
-    'DELETE t, r, o'
+    'DELETE t, o',
+    'FOREACH(_r in r | DELETE _r)'
   ].join('\n');
 
   var params = {
@@ -478,20 +480,19 @@ Target.prototype.getTargets = function(depth, callback) {
 };
 
 /**
- * @function Middleware um das Hauptlernziel, zu dem dieses Lernziel gehört, im Request zu speichern
+ * @function Helferfunktion um das Hauptlernziel, zu dem dieses Lernziel gehört, zu erhalten
  */
-Target.prototype.getParentTarget = function(callback) {
+Target.prototype.getParentEntryTarget = function(callback) {
 
   var self = this;
 
-  // falls dieses ein Hauptlernziel ist -> zurückgeben
-  if(this.isEntryTarget()) {
+  if(self.isEntryTarget()) {
     return callback(null, self);
   }
 
   var query = [
-    'MATCH (t2:Target {uuid: {uuid}})-[r *1..]->(t:Target:EntryTarget)',
-    'RETURN t'
+    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'RETURN et'
   ].join('\n');
 
   var params = {
@@ -502,11 +503,40 @@ Target.prototype.getParentTarget = function(callback) {
     query: query,
     params: params
   }, function(err, result) {
-    if(err) return callback(err);
-    callback(null, new Target(result[0].t));
+    callback(err, new Target(result[0].et));
   });
 
 };
+
+/**
+ * @function Helferfunktion um das unmittelbar nächste Lernziel, zu dem diese Info gehört, zu erhalten
+ */
+Target.prototype.getParentTarget = function(callback) {
+
+  var self = this;
+
+  if(self.isEntryTarget()) {
+    return callback(null, self);
+  }
+
+  var query = [
+    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF]->(et:Target)',
+    'RETURN et'
+  ].join('\n');
+
+  var params = {
+    uuid: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    callback(err, new Target(result[0].et));
+  });
+
+};
+
 
 /**
  * @function Liefert das aktuelle Konfigurationsobjekt für das Lernziel selbst
@@ -532,17 +562,50 @@ Target.prototype.getConfig = function(cb) {
   }, function(err, result) {
     if(err) return cb(err);
     if(result.length === 0) {
-      // das Lernziel hat keine eigene Config -> Config von nächsthöheren Lernziel holen
-      self.getParent(function(err, nextParent) {
-        if(err) return cb(err);
-        console.log(nextParent, 2);
-        nextParent.getConfig(cb);
-      });
+      // das Lernziel hat keine eigene Config -> leeres Objekt
+      return cb(null, {});
     } else {
       // falls es eine eigene Config hat:
       var config = new Config(result[0].c);
       return cb(null, config);
     }
+  });
+
+};
+
+/**
+ * @function Liefert die globale Konfiguration unter der dieses lernziel steht.
+ */
+Target.prototype.getGlobalConfig = function(cb) {
+
+  var self = this;
+
+  self.getParentEntryTarget(function(err, et) {
+    if(err) return cb(err);
+
+    var query = [
+      'MATCH (t:EntryTarget {uuid: {entryTargetUUID}})<-[:BELONGS_TO]-(gc:GlobalConfig)',
+      'RETURN gc'
+    ].join('\n');
+
+    var params = {
+      entryTargetUUID: et.uuid
+    };
+
+    db.cypher({
+      query: query,
+      params: params
+    }, function(err, result) {
+      if(err) return cb(err);
+      if(result.length === 0) {
+        err = new Error('Das Hauptlernziel `'+self.uuid+'` oder dessen globale Konfiguration existiert nicht');
+        err.status = 404;
+        return cb(err);
+      }
+      var gc = new GlobalConfig(result[0].gc);
+      return cb(null, gc);
+    });
+
   });
 
 };
@@ -572,6 +635,31 @@ Target.prototype.getUsers = function (cb) {
       return new User(i.u);
     });
     return cb(null, users);
+  });
+
+};
+
+/**
+ * @function Helferfunktion, die überprüft, ob das Lernziel bereits eine eigene Konfiguration besitzt
+ */
+Target.prototype.hasConfig = function(cb) {
+
+  var self = this;
+
+  var query = [
+    'MATCH (t:Target {uuid: {targetUUID}})<-[:BELONGS_TO]-(c:Config)',
+    'RETURN c'
+  ].join('\n');
+
+  var params = {
+    targetUUID: self.uuid
+  };
+
+  db.cypher({
+    query: query,
+    params: params
+  }, function(err, result) {
+    return cb(err, result.length === 0 ? false : true);
   });
 
 };

@@ -28,22 +28,6 @@ router.get('/ratings/:ratingUUID', helper.prefetchRating, auth.restricted, funct
 
 });
 
-// Gibt Bewertungen der Bewertung zurück
-router.get('/ratings/:ratingUUID/ratings', helper.prefetchRating, auth.restricted, function(req, res, next) {
-
-  var _rating = req._rating;
-  var user = req.user;
-
-  _rating.getRatings(function(err, ratings) {
-    if(err) return next(err);
-    ratings.forEach(function(r) {
-      r.addMetadata(API_VERSION);
-    });
-    res.json(ratings);
-  });
-
-});
-
 // Gibt eigene Bewertung für die Bewertung zurück, falls eine existiert
 router.get('/ratings/:ratingUUID/rating', helper.prefetchRating, auth.restricted, function(req, res, next) {
 
@@ -131,6 +115,26 @@ router.post('/ratings/:ratingUUID/ratings', helper.prefetchRating, auth.restrict
     });
   }
 
+
+});
+
+/**************************************************
+            AUTHOR ONLY ROUTES
+**************************************************/
+
+// Gibt Bewertungen der Bewertung zurück
+router.get('/ratings/:ratingUUID/ratings', helper.prefetchRating, auth.authorOnly, function(req, res, next) {
+
+  var _rating = req._rating;
+  var user = req.user;
+
+  _rating.getRatings(function(err, ratings) {
+    if(err) return next(err);
+    ratings.forEach(function(r) {
+      r.addMetadata(API_VERSION);
+    });
+    res.json(ratings);
+  });
 
 });
 

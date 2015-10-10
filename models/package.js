@@ -177,6 +177,7 @@ Object.defineProperty(Package.prototype, 'infosDone', {
  */
 Package.prototype.updatePackage = function(job, config, cb) {
 
+
   var self = this;
 
   var query = [
@@ -186,7 +187,6 @@ Package.prototype.updatePackage = function(job, config, cb) {
   ].join('\n');
 
   var params = self.properties; // Parameter einfach die Attribute des aktuellen Pakets zuweisen damit es später überschrieben werden kann
-  params.packageUUID = self.uuid;
 
   // je nachdem was "angekreuzt" wurde, muss das Arbeitspaket aktualisiert werden
   if(job.tasks) {
@@ -215,7 +215,8 @@ Package.prototype.updatePackage = function(job, config, cb) {
   db.cypher({
     query: query,
     params: {
-      properties: params
+      properties: params,
+      packageUUID: self.uuid
     }
   }, function(err, result) {
     if(err) return cb(err);
@@ -241,5 +242,5 @@ Package.prototype.updatePackage = function(job, config, cb) {
  * @TODO Sollte gegenüber node.isFinished() angepasst werden
  */
 Package.prototype.isFinished = function() {
-  return this.labels.indexOf('Finished') > -1;
+  return this.ratingsToDo === 0 && this.infosToDo === 0 && this.tasksToDo === 0 && this.solutionsToDo === 0;
 };

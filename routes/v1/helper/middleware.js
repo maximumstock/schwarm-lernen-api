@@ -10,6 +10,8 @@ var Solution = require('../../../models/solution');
 var Info = require('../../../models/info');
 var Rating = require('../../../models/rating');
 
+var async = require('async');
+
 /**
  * @function Middleware die den gesuchten Studiengang-Lernziel-Pfad direkt auflöst und das Lernziel-Objekt im Request platziert.
  * Dies spart Code in der eigentlichen Endpunkt-Implementierung.
@@ -74,7 +76,7 @@ exports.prefetchRating = function(req, res, next) {
 
 };
 
-// holt das config objekt vom req._checker objekt
+// holt das config objekt vom Lernziel, welches req._checker.getParentTarget liefert und die globale Config von req._checker.getParentEntryTarget
 // sollte nur nach einer der oberen prefetch-Middleware-Funktionen genutzt werden
 exports.prefetchConfig = function(req, res, next) {
 
@@ -87,11 +89,29 @@ exports.prefetchConfig = function(req, res, next) {
 
   req._checker.getParentTarget(function(err, target) {
     if(err) return next(err);
-    target.getConfig(function(err, config) {
-      if(err) return next(err);
-      req._config = config;
+
+    async.parallel([
+      function(_cb) {
+        if(req._checker.labels.indexOf('Target') > -1) {
+          return req._checker.getConfig(_cb);
+        }
+        target.getConfig(_cb);
+      }, function(_cb) {
+        target.getGlobalConfig(_cb);
+      }
+    ], function(errors, results) {
+      if(errors) return next(errors);
+
+      // aus globaler und spezieller Config eine gemeinsame Config bauen (Achtung auf `uuid` und andere spezielle Attribute achten)
+      // da `Config` und `GlobalConfig` verschiedene JS Prototypen darstellen, ist es unratsam einfach eine neue Config mit der Schnittmenge
+      // der Attribute zu erstellen, da bspw. nicht beide Prototypen die gleichen Getter-Methoden definiert haben
+      // daher bietet es sich an in req._config einfach ein reines JS Objekt anstatt eines Prototypen zu speichern
+      req._config = results[1].combine(results[0]);
       next();
+
     });
+
+
   });
 
 };
@@ -117,5 +137,44 @@ exports.prefetchPackage = function(req, res, next) {
     req._package = workpackage;
     return next();
   });
+
+};
+
+
+// Helferfunktion, die den Request nur weiterleitet, wenn der User ein Admin ist oder der User die Ressource unter `req._checker` bereits bewertet hat
+// Damit kann komfortabler garantiert werden, dass Requests unter `GET /{typ}/{uuid}/ratings` nur bearbeitet werden, wenn der Anfragende ein Admin, der Autor der
+// Ressource oder ein beliebiger User, der die Ressource bereits selbst bewertet hat, ist.
+exports.alreadyRatedRestricted = function(req, res, next) {
+
+  if(!req._checker) {
+    var err = new Error('helper.alreadyRatedRestricted sollte nicht ohne mindestens eine `prefetch*`-Middleware benutzt werden');
+    err.status = 500;
+    err.name = 'N00bAdmin';
+    return next(err);
+  }
+
+  var resource = req._checker; // die jeweilige Ressource, deren Ratings abgefragt werden
+  var user = req.user;
+
+  if(user.isAdmin()) {
+    return next(); // Admins dürfen sowieso
+  }
+
+  user.hasCreated(resource.uuid, function(err, hasCreated) {
+    if(err) return next(err);
+    if(hasCreated) {
+      return next(); // Autoren dürfen immer die Ratings ihrer eigenen Inhalte sehen
+    }
+    user.hasRated(resource.uuid, function(err, hasRated) {
+      if(err) return next(err);
+      if(hasRated) {
+        return next(); // falls der User den Inhalt bereits bewertet hat, darf er auch weiter
+      }
+      err = new Error('Du darfst die Bewertungen dieses Inhalts erst sehen, wenn du den Inhalt selbst bewertet hast');
+      err.status = 401;
+      return next(err);
+    });
+  });
+
 
 };

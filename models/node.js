@@ -181,10 +181,25 @@ Node.prototype.toggle = function(callback) {
 };
 
 /**
- * @function Vorlage für für die `getParentTarget` Funktion aller von `Node` abgeleiteten Prototypen
+ * @function Vorlage für für die `getParentEntryTarget` Funktion aller von `Node` abgeleiteten Prototypen
  * Um später innerhalb der API feststellen zu können ob ein User Zugriff auf eine Ressource hat,
- * müssen alle Ressourcenprototypen die Methode `getParentTarget` implementieren. Um etwaige verpasste
+ * müssen alle Ressourcenprototypen die Methode `getParentEntryTarget` implementieren. Mit dieser Funktion soll
+ * später, unabhängig vom Typ der Node (Aufgabe, Info, Lösung, etc...) das alleroberste Hauptlernziel erfasst werden können.
+ * Über das Hauptlernziel widerum ist es möglich zu überprüfen ob der User Zugriff hat. Um etwaig verpasste
  * Implementierungen abzufangen gibt es hier eine vererbte Implementierung, welche den Server
+ * crashen lässt.
+ */
+Node.prototype.getParentEntryTarget = function() {
+
+  var err = new Error('Dieser Prototyp hat die Funktion `getParentEntryTarget` noch nicht implementiert. Crash!');
+  console.log(err, this);
+  throw err;
+
+};
+
+/**
+ * @function Liefert das Lernziel was am Nähesten an dieser Node liegt.
+ * Um etwaig verpasste Implementierungen abzufangen gibt es hier eine vererbte Implementierung, welche den Server
  * crashen lässt.
  */
 Node.prototype.getParentTarget = function() {
