@@ -23,13 +23,13 @@ var profiles = require('./profiles');
 router.get('/', function(req, res, next) {
   var prefix = '/api/v1';
   res.json({
-    degrees: prefix + '/degrees',
     targets: prefix + '/targets',
     solutions: prefix + '/solutions',
     tasks: prefix + '/tasks',
     infos: prefix + '/infos',
     ratings: prefix + '/ratings',
-    users: prefix + '/users'
+    users: prefix + '/users',
+    self: prefix + '/self'
   });
 });
 
