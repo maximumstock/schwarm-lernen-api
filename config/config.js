@@ -17,11 +17,8 @@ module.exports = function() {
     case 'production':
       config = require('./env/production');
       break;
-    case 'testing':
-      config = require('./env/testing');
-      break;
   }
-  
+
   return config;
 
 }(process.NODE_ENV);

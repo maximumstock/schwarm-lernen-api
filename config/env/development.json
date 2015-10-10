@@ -1,12 +1,9 @@
 {
-
   "environment" : "DEVELOPMENT",
   "NEO4J_URL"   : "http://neo4j:speedy66@localhost:7474/graphaware",
   "HOST_URL"    : "",
-  "API_SECRET"  : "fightmeirlf4gg0t",
+  "API_SECRET"  : "randomSecret",
   "DISABLE_AUTH": false,
   "DEFAULT_USERNAME_LENGTH": 7,
-  "DEFAULT_PASSWORD_LENGTH": 7,
-  "DEFAULT_ADMIN_PASSWORD": "admin"
-
+  "DEFAULT_PASSWORD_LENGTH": 7
 }
