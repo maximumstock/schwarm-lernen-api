@@ -6,6 +6,7 @@ var HOST_URL = process.env.HOST_URL || '';
 var DISABLE_AUTH = process.env.DISABLE_AUTH || false;
 var DEFAULT_USERNAME_LENGTH = 7;
 var DEFAULT_PASSWORD_LENGTH = 7;
+var PORT = process.env.PORT;
 
 if(!NEO4J_URL) {
   throw new Error('NEO4J_URL fehlt');
@@ -13,8 +14,8 @@ if(!NEO4J_URL) {
 if(!API_SECRET) {
   throw new Error('API_SECRET fehlt');
 }
-if(!NEO4J_URL) {
-  throw new Error('NEO4J_URL fehlt');
+if(!PORT) {
+  throw new Error('PORT fehlt');
 }
 
 module.exports = {
