@@ -79,7 +79,7 @@ app.use(function(err, req, res, next) {
 });
 
 // Starten des Webservers
-var server = app.listen(config.port || 4003, function(error) {
+var server = app.listen(config.PORT || 4003, function(error) {
   // Fehler beim Starten
   if (error) {
     throw error;
