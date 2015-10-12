@@ -32,7 +32,7 @@ router.get('/infos/:infoUUID', helper.prefetchInfo, auth.restricted, function(re
 });
 
 // Gibt Bewertung der Info zurück
-router.get('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.restricted, helper.alreadyRatedRestricted, function(req, res, next) {
+router.get('/infos/:infoUUID/ratings', helper.prefetchInfo, auth.authorRestricted, function(req, res, next) {
 
   var info = req._info;
   var user = req.user;

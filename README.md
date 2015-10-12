@@ -89,11 +89,11 @@ Die Konfiguration des jeweiligen Hauptlernziels bestimmt wie viele Punkte für d
 	* solutionMaxPoints - Integer - maximale Anzahl der Punkte die ein Nutzer durch Bewertungen von seinen Lösungen erhalten soll - Default: 0
 	* infoMaxPoints - Integer - maximale Anzahl der Punkte die ein Nutzer durch Bewertungen von seinen Infos erhalten soll - Default: 10
 	* taskMaxPoints - Integer - maximale Anzahl der Punkte die ein Nutzer durch Bewertungen von seinen Aufgaben erhalten soll - Default: 10
-	* ratePoints - Integer - Anzahl der Punkte die ein Nutzer für das Bewerten von Bewertungen erhalten soll - Default: 1
+	* ratePoints - Integer - Anzahl der Punkte die ein Nutzer für das Bewerten von Inhalten/Bewertungen erhalten soll - Default: 1
 	* solutionCost - Integer - Anzahl der Punkte die das Einstellen einer Lösung kosten soll - Default: 10
 	* infoCost - Integer - Anzahl der Punkte die das Einstellen einer Info kosten soll - Default: 0
 	* taskCost - Integer - Anzahl der Punkte die das Einstellen einer Aufgabe kosten soll - Default: 0
-	* rateCost - Integer - Anzahl der Punkte die das Bewerten von Inhalten kosten soll - Default: 0
+	* rateCost - Integer - Anzahl der Punkte die das Bewerten von Inhalten/Bewertungen kosten soll - Default: 0
 
 ---
 ### Aufgaben/Tasks

@@ -34,7 +34,7 @@ router.get('/tasks/:taskUUID', helper.prefetchTask, auth.restricted, function(re
 });
 
 // Gibt Bewertung der Aufgabe zurück
-router.get('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, helper.alreadyRatedRestricted, function(req, res, next) {
+router.get('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.authorRestricted, function(req, res, next) {
 
   var task = req._task;
   var user = req.user;

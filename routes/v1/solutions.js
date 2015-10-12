@@ -32,7 +32,7 @@ router.get('/solutions/:solutionUUID', helper.prefetchSolution, auth.restricted,
 });
 
 // Gibt Bewertung der Lösung zurück
-router.get('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.restricted, helper.alreadyRatedRestricted, function(req, res, next) {
+router.get('/solutions/:solutionUUID/ratings', helper.prefetchSolution, auth.authorRestricted, function(req, res, next) {
 
   var solution = req._solution;
   var user = req.user;

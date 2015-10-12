@@ -168,3 +168,46 @@ exports.authorOnly = function(req, res, next) {
     });
 
 };
+
+
+/**
+ * @function Überprüft ob der User der Autor der angefragten Ressource ist. Falls nicht gibt es einen Fehler
+ * Wird nur in Verwendung mit exports.restricted genutzt um zu gewährleisten, dass generell Zugriff auf die Ressourcen des
+ * Studiengangs gewährt ist, aber der Nutzer keine Aufgaben, Infos, Lösungen oder Kommentare anderer Nutzer im gleichen
+ * Studiengang löschen oder ändern kann.
+ */
+exports.authorRestricted = function(req, res, next) {
+
+  if(!req.user) {
+    return next(new Error('authorOnly Middleware sollte nicht standalone genutzt werden'));
+  }
+
+  if(req.user.isAdmin()) {
+    return next();
+  }
+
+  // exports.restricted garantiert bereits, dass sich der User berechtigterweise auf dieses Lernziel Zugriff hat
+  // Jetzt muss noch überprüft werden, ob er auch der Autor der jeweiligen Ressource ist
+  var id = req.params.taskUUID || req.params.infoUUID || req.params.solutionUUID || req.params.ratingUUID; // ID der zu ändernden/löschenden Ressource
+
+  if(!id) {
+    // falls weder eine taskUUID, infoUUID, solutionUUID oder commentUUID existiert, ist etwas schief gelaufen oder die Middleware wurde falsch verwendet
+    var err = new Error('Es gibt keine Ressourcen-ID die geprüft werden kann (authorOnly Middleware)');
+    return next(err);
+  }
+
+  req.user.hasCreated(id, function(err, result) {
+    if(err) return next(err);
+    if(result) {
+      // user ist der Autor
+      return next(); // einfach durchwinken
+    } else {
+      // user ist NICHT! der Autor
+      err = new Error('Du bist nicht der Autor dieser Ressource und kannst sie deshalb weder löschen noch ändern');
+      err.status = 401;
+      err.name = 'MissingAuthorStatus';
+      return next(err);
+      }
+    });
+
+};
