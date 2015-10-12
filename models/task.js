@@ -349,7 +349,7 @@ Task.prototype.getParentEntryTarget = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (t:Task {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'MATCH (t:Task {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *0..]->(et:Target:EntryTarget)',
     'RETURN et'
   ].join('\n');
 

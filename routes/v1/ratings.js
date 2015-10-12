@@ -100,7 +100,7 @@ router.post('/ratings/:ratingUUID/ratings', helper.prefetchRating, auth.restrict
       }
       // falls > 0: Einstellung möglich
       // überprüfe ob der Nutzer noch genug Punkte hat
-      user.hasPoints(config.ratingCost, function(err, heDoes) {
+      user.hasPoints(config.rateCost, function(err, heDoes) {
         if(err) return next(err);
         if(!heDoes) {
           err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');

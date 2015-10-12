@@ -278,7 +278,7 @@ Info.prototype.getParentEntryTarget = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'MATCH (i:Info {uuid: {uuid}})-[:BELONGS_TO]->(target:Target)-[:PART_OF *0..]->(et:Target:EntryTarget)',
     'RETURN et'
   ].join('\n');
 

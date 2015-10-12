@@ -278,7 +278,7 @@ Solution.prototype.getParentEntryTarget = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (s:Solution {uuid: {uuid}})-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target)-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'MATCH (s:Solution {uuid: {uuid}})-[:SOLVES]->(t:Task)-[:BELONGS_TO]->(target:Target)-[:PART_OF *0..]->(et:Target:EntryTarget)',
     'RETURN et'
   ].join('\n');
 

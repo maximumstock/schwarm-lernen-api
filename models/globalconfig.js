@@ -84,7 +84,7 @@ GlobalConfig.DEFAULT_CONFIG = {
   infoCost: 0,
   taskCost: 0,
   solutionCost: 10, // eig Kosten
-  rateCost: 1 // Anzahl der Punkte die der Bewertende für eine Bewertung bekommt
+  rateCost: 1 // Anzahl der Punkte die der Bewertende für eine Bewertung bezahlen muss
 };
 
 Object.defineProperty(GlobalConfig.prototype, 'packageSize', {

@@ -87,8 +87,8 @@ router.post('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, he
       // Punkte an den Ersteller des bewerteten Inhalts verteilen
       async.parallel([
         function(_cb) { pack.updatePackage({ratings: 1}, config, _cb); },
-        function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratingPoints}, _cb); },
-        function(_cb) { rating.takePointsFrom(user.uuid, {points: config.ratingCost}, _cb); },
+        function(_cb) { rating.givePointsTo(user.uuid, {points: config.ratePoints}, _cb); },
+        function(_cb) { rating.takePointsFrom(user.uuid, {points: config.rateCost}, _cb); },
         function(_cb) { rating.givePointsTo(task.author, {points: rating.getRating().avg, prestige: user.prestige, maxpoints: config.taskMaxPoints}, _cb); }
       ], function(errors, results) {
         if(errors) next(errors);
@@ -121,7 +121,7 @@ router.post('/tasks/:taskUUID/ratings', helper.prefetchTask, auth.restricted, he
       }
       // falls > 0: Einstellung möglich
       // überprüfe ob der Nutzer noch genug Punkte hat
-      user.hasPoints(config.ratingCost, function(err, heDoes) {
+      user.hasPoints(config.rateCost, function(err, heDoes) {
         if(err) return next(err);
         if(!heDoes) {
           err = new Error('Du hast nicht genug Punkte um eine Bewertung abzugeben');

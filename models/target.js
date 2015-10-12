@@ -491,7 +491,7 @@ Target.prototype.getParentEntryTarget = function(callback) {
   }
 
   var query = [
-    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF *1..]->(et:Target:EntryTarget)',
+    'MATCH (t:Target {uuid: {uuid}})-[:PART_OF *0..]->(et:Target:EntryTarget)',
     'RETURN et'
   ].join('\n');
 
