@@ -403,7 +403,7 @@ Target.prototype.getChildren = function(depth, callback) {
 
   var query = [
     'MATCH (t:Target {uuid: {uuid}})<-[*1..'+parseInt(depth)+']-(c)',
-    'WHERE NOT c:Unfinished',
+    'WHERE NOT c:Unfinished and NOT c:Unfinished',
     'RETURN c'
   ].join('\n');
 

@@ -318,7 +318,7 @@ Task.prototype.getSolutions = function(callback) {
   var self = this;
 
   var query = [
-    'MATCH (a:Task {uuid: {uuid}})<-[r:SOLVES]-(s:Solution) WHERE NOT s:Inactive',
+    'MATCH (a:Task {uuid: {uuid}})<-[r:SOLVES]-(s:Solution) WHERE NOT s:Inactive AND NOT s:Unfinished',
     'RETURN s'
   ].join('\n');
 
