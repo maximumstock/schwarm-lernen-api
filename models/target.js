@@ -761,6 +761,7 @@ Target.prototype.addMetadata = function(apiVersion) {
 
   if(this.isEntryTarget()) {
     links.users = base + '/users';
+    links.globalconfig = base + '/globalconfig';
   }
 
   this.links = links;

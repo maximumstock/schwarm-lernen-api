@@ -68,7 +68,7 @@ Die Konfiguration des jeweiligen Hauptlernziels bestimmt wie viele Punkte für d
 * **NEW** `PUT /targets/:targetUUID/config` - AdminOnly - Aktualisiert die Konfiguration von `:targetUUID` (Parameter siehe [Standardkonfiguration](#defaultconfig))
 * **NEW** `PUT /targets/:targetUUID/global` - AdminOnly - Aktualisiert die globale Konfiguration des Lernzielbaums zu dem `:targetUUID` gehört
 * `DELETE /targets/:targetUUID` - AdminOnly - Löscht das Lernziel mit der ID `:targetUUID`
-* `DELETE /targets/:targetUUID/config` - AdminOnly - Löscht die Config des Lernziels `:targetUUID`, aber ausschließlich dann, wenn es sich bei `:targetUUID` nicht um ein Hauptlernziel handelt
+* `DELETE /targets/:targetUUID/globalconfig` - AdminOnly - Löscht die Config des Lernziels `:targetUUID`, aber ausschließlich dann, wenn es sich bei `:targetUUID` nicht um ein Hauptlernziel handelt
 
 * Hinweise zu Konfigurationen:
 	* jedes Hauptlernziel erhält bei der Erstellung eine globale Konfiguration (Parameter siehe [Standardkonfiguration](#defaultconfig))
@@ -76,7 +76,7 @@ Die Konfiguration des jeweiligen Hauptlernziels bestimmt wie viele Punkte für d
 	* unter `/targets/:targetUUID/config` erhält man die globale Konfiguration überschrieben mit den Werten aus der spezialisierten Konfiguration von `:targetUUID`
 	* die Parameter `packageSize`, `taskShare`, `infoShare`, `solutionShare` und `rateShare` werden nicht von der spezialisierten Konfiguration überschrieben
 	* als `[G]` markierte Konfigurationsparameter können nicht durch spezialisierte Konfigurationen überschrieben werden
-	
+
 * <a name="defaultconfig">Standardkonfiguration</a>:
 	* [G] - packageSize - Integer, min. 5 - Gesamtgröße für neue Arbeitspakete - Default: 10
 	* [G] - solutionShare - Integer - Prozentwert die Lösungen in einem Arbeitspaket ausmachen sollen - Default: 0%
