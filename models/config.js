@@ -183,52 +183,43 @@ Config.get = function (uuid, callback) {
  */
 Config.create = function (properties, parentUUID, callback) {
 
-  // Validierung
-  validator
-    .validate(Config.VALIDATION_RULES, properties)
-    .then(function() {
 
-      properties.createdAt = moment().format('X');
-      properties.parent = parentUUID;
+    properties.createdAt = moment().format('X');
+    properties.parent = parentUUID;
 
-      var query = [
-        'MATCH (t:Target {uuid: {parentUUID}})',
-        'CREATE (t)<-[:BELONGS_TO]-(c:Config {properties})',
-        'RETURN c'
-      ].join('\n');
+    var query = [
+      'MATCH (t:Target {uuid: {parentUUID}})',
+      'CREATE (t)<-[:BELONGS_TO]-(c:Config {properties})',
+      'RETURN c'
+    ].join('\n');
 
-      var params = {
-        properties: properties,
-        parentUUID: parentUUID
-      };
+    var params = {
+      properties: properties,
+      parentUUID: parentUUID
+    };
 
-      db.cypher({
-        query: query,
-        params: params
-      }, function (err, result) {
+    db.cypher({
+      query: query,
+      params: params
+    }, function (err, result) {
+
+      if (err) return callback(err);
+      if(result.length === 0) {
+        err = new Error('Es gibt kein Lernziel mit der UUID `'+parentUUID+'`');
+        err.name = 'TargetNotFound';
+        err.status = 404;
+        return callback(err);
+      }
+      // gerade erstellte Instanz hat noch keine uuid -> mit `_id` Property nochmal querien
+      var id = result[0].c._id;
+      dbhelper.getNodeByID(id, function (err, node) {
 
         if (err) return callback(err);
-        if(result.length === 0) {
-          err = new Error('Es gibt kein Lernziel mit der UUID `'+parentUUID+'`');
-          err.name = 'TargetNotFound';
-          err.status = 404;
-          return callback(err);
-        }
-        // gerade erstellte Instanz hat noch keine uuid -> mit `_id` Property nochmal querien
-        var id = result[0].c._id;
-        dbhelper.getNodeByID(id, function (err, node) {
-
-          if (err) return callback(err);
-          var c = new Config(node);
-          callback(null, c);
-
-        });
+        var c = new Config(node);
+        callback(null, c);
 
       });
 
-    })
-    .catch(function(errors) {
-      return callback(errors);
     });
 
 };

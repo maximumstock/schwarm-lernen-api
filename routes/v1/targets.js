@@ -316,7 +316,7 @@ router.put('/targets/:targetUUID/config', auth.adminOnly, helper.prefetchTarget,
       });
     } else {
       // falls noch keine Config besteht -> neue default Config erstellen und danach aktualisieren
-      Config.create(Config.DEFAULT_CONFIG, target.uuid, function(err, config) {
+      Config.create({}, target.uuid, function(err, config) {
         if(err) return next(err);
         config.patch(req.body, function(err, nconfig) {
           if(err) return next(err);

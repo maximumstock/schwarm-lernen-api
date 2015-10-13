@@ -758,10 +758,10 @@ Target.prototype.addMetadata = function(apiVersion) {
   links.children = base + '/children';
   links.parent = base + '/parent';
   links.config = base + '/config';
+  links.globalconfig = base + '/globalconfig';
 
   if(this.isEntryTarget()) {
     links.users = base + '/users';
-    links.globalconfig = base + '/globalconfig';
   }
 
   this.links = links;

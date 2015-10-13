@@ -47,7 +47,7 @@ Die Konfiguration des jeweiligen Hauptlernziels bestimmt wie viele Punkte für d
 * `GET /targets/:targetUUID` - AccessRestricted - Ein bestimmtes Lernziel mit der ID `:targetUUID`
 * `GET /targets/:targetUUID/parent` - AccessRestricted - Die Vaternode des Lernziels
 * `GET /targets/:targetUUID/children` - AccessRestricted - Liefert alle Kind-Nodes des Lernziels `:targetUUID` sortiert nach **Tasks**, **Infos** (welche bereits per `/submit` abgegeben wurden) und **Targets**
-* **NEW** `GET /targets/:targetUUID/config` - AccessRestricted - Liefert die Konfiguration des Lernziels
+* **NEW** `GET /targets/:targetUUID/config` - AccessRestricted - Liefert die Konfiguration des Lernziels als Schnittmenge aus der globalen und speziellen Config von `:targetUUID`
 * **NEW** `GET /targets/:targetUUID/globalconfig` - AccessRestricted - Liefert die globale Konfiguration des Lernzielbaums zu dem `:targetUUID` gehört
 * `GET /targets/:targetUUID/users` - AccessRestricted - Liefert Liste alle Nutzer die auf dieses Lernziel Zugriff haben. Falls `:targetUUID` kein Hauptlernziel/EntryTarget ist, wird momentan ein leeres Array zurückgeliefert, da die Zugriffssteuerung über das verantwortliche Hauptlernziel läuft
 * **NEW** `POST /targets` - AdminOnly - Erstellt ein neues Hauptlernziel
