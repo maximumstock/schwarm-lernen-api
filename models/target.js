@@ -562,8 +562,16 @@ Target.prototype.getConfig = function(cb) {
   }, function(err, result) {
     if(err) return cb(err);
     if(result.length === 0) {
-      // das Lernziel hat keine eigene Config -> leeres Objekt
-      return cb(null, {});
+      // das Hauptlernziel hat keine eigene Config -> leeres Objekt
+      if(self.isEntryTarget()) {
+        return cb(null, {});
+      } else {
+        // das Lernziel hat keine eigene Config -> getParent()->getConfig()
+        self.getParentTarget(function(err, parent) {
+          if(err) return cb(err);
+          parent.getConfig(cb);
+        });
+      }
     } else {
       // falls es eine eigene Config hat:
       var config = new Config(result[0].c);
