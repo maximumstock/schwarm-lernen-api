@@ -32,10 +32,10 @@ app.use(function(req, res, next) {
 });
 
 // Konfigurationsdatei laden
-var config = require('./config/config');
+var config = require('./lib/config/config');
 
 // Routen einbinden
-var apiv1 = require('./routes/v1/index');
+var apiv1 = require('./lib/routes/v1/index');
 app.use('/api/v1', apiv1);
 
 // 404 Fehler abfangen

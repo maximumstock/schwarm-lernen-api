@@ -4,7 +4,7 @@ var request = require('supertest');
 var app = require('../../');
 var expect = require('chai').expect;
 
-var PREFIX = '/api/v2';
+var PREFIX = '/api/v1';
 var TOKEN = null;
 
 describe('/degrees', function() {
